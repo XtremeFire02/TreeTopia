@@ -31,6 +31,14 @@ down and do not preserve local filesystem data, which is not suitable for this g
 Every push to `main` deploys the latest code automatically. Runtime account/profile/world
 data is written to `DATA_DIR` (`/var/data` on Render), not to the Git repository.
 
+## AWS hosting
+
+This repo also includes an AWS EC2 deploy path in `deploy/aws/`.
+
+Use AWS if you want direct control over a 24/7 server with a permanent Elastic IP.
+Follow `deploy/aws/README.md` to create the EC2 instance, bootstrap Node/Nginx/systemd,
+and connect GitHub Actions so every push to `main` updates the live game.
+
 ## Controls
 
 | Action | Keys |

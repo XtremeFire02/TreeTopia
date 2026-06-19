@@ -1,0 +1,58 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create release archive
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='server/data' \
+            -czf treetopia.tar.gz .
+
+      - name: Upload and activate release
+        env:
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
+          AWS_SSH_KEY: ${{ secrets.AWS_SSH_KEY }}
+          RELEASE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          : "${AWS_HOST:?Missing GitHub secret AWS_HOST}"
+          : "${AWS_USER:?Missing GitHub secret AWS_USER}"
+          : "${AWS_SSH_KEY:?Missing GitHub secret AWS_SSH_KEY}"
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AWS_SSH_KEY" > ~/.ssh/treetopia_deploy_key
+          chmod 600 ~/.ssh/treetopia_deploy_key
+          ssh-keyscan -H "$AWS_HOST" >> ~/.ssh/known_hosts
+
+          scp -i ~/.ssh/treetopia_deploy_key treetopia.tar.gz "$AWS_USER@$AWS_HOST:/tmp/treetopia.tar.gz"
+
+          ssh -i ~/.ssh/treetopia_deploy_key "$AWS_USER@$AWS_HOST" "RELEASE='$RELEASE' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_DIR=/opt/treetopia
+          RELEASE_DIR="$APP_DIR/releases/$RELEASE"
+
+          mkdir -p "$RELEASE_DIR"
+          tar -xzf /tmp/treetopia.tar.gz -C "$RELEASE_DIR"
+
+          cd "$RELEASE_DIR"
+          npm ci --omit=dev
+
+          ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
+          sudo systemctl restart treetopia
+          sudo systemctl --no-pager --full status treetopia
+          REMOTE
