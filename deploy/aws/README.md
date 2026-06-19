@@ -4,22 +4,37 @@ This deploy path runs TreeTopia 24/7 on one Ubuntu EC2 server. Nginx receives pu
 browser traffic on port 80 and proxies it to the Node/WebSocket game server on localhost
 port 3000. Runtime data is stored outside the release folder at `/var/lib/treetopia`.
 
-## 1. Create the AWS server
+## Fast path with AWS CloudShell
+
+In the AWS Console, open CloudShell in region `ap-southeast-2`, then run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/XtremeFire02/TreeTopia/main/deploy/aws/provision-cloudshell.sh -o provision-cloudshell.sh
+bash provision-cloudshell.sh
+```
+
+The script creates the EC2 instance, security group, Elastic IP, and SSH key pair.
+After it prints the Elastic IP, add the printed values as GitHub Actions secrets and run
+the `Deploy to AWS EC2` workflow.
+
+## Manual path: 1. Create the AWS server
 
 1. Open AWS EC2 and choose **Launch instance**.
 2. Name it `treetopia-prod`.
-3. Pick a region close to your players, for example Singapore `ap-southeast-1`.
+3. Pick a region close to your players, for example Sydney `ap-southeast-2`.
 4. Choose **Ubuntu Server 24.04 LTS**.
 5. Choose `t3.micro` to start, or `t3.small` if more people will be online.
 6. Create and download a key pair named `treetopia-key.pem`.
 7. Create a security group with these inbound rules:
-   - SSH `22` from **My IP** only.
+   - SSH `22` from `0.0.0.0/0` so GitHub Actions can deploy over SSH.
    - HTTP `80` from `0.0.0.0/0`.
    - HTTPS `443` from `0.0.0.0/0`.
 8. Use at least a 16 GB gp3 root volume.
 9. Launch the instance.
 
 Do not open port `3000` to the internet. Nginx is the public entry point.
+For better hardening later, replace public SSH with AWS Systems Manager or a self-hosted
+GitHub Actions runner.
 
 ## 2. Give it a permanent address
 
