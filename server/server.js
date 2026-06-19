@@ -34,7 +34,7 @@ const PROFILES_FILE = path.join(DATA, 'profiles.json');
 const ACCOUNTS_FILE = path.join(DATA, 'accounts.json');
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const DEV_ACCOUNTS = new Set(['XtremeFire']);
+const DEV_ACCOUNTS = new Set(['xtremefire']);
 const DEV_GEM_BALANCE = Number.MAX_SAFE_INTEGER;
 
 fs.mkdirSync(WORLDS_DIR, { recursive: true });
@@ -114,7 +114,8 @@ function publicPlayer(p) {
   return { id: p.id, name: p.name, x: p.x, y: p.y, dir: p.dir, anim: p.anim, punchAngle: p.punchAngle || 0, punchDist: p.punchDist || 0, punchSeq: p.punchSeq ?? 0 };
 }
 
-function isDeveloperName(name) { return DEV_ACCOUNTS.has(name) && !!accounts[name]; }
+function normalizeAccountName(name) { return String(name || '').toLowerCase(); }
+function isDeveloperName(name) { return DEV_ACCOUNTS.has(normalizeAccountName(name)) && !!accounts[name]; }
 function isDeveloper(p) { return !!(p && isDeveloperName(p.name)); }
 function gemBalance(p) { return isDeveloper(p) ? DEV_GEM_BALANCE : (p.gems || 0); }
 function canAffordGems(p, amount) { return isDeveloper(p) || (p.gems || 0) >= amount; }
