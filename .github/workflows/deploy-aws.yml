@@ -19,7 +19,7 @@ jobs:
             --exclude='.git' \
             --exclude='node_modules' \
             --exclude='server/data' \
-            -czf treetopia.tar.gz .
+            -czf /tmp/treetopia.tar.gz .
 
       - name: Upload and activate release
         env:
