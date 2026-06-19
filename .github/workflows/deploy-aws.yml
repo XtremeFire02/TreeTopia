@@ -38,7 +38,7 @@ jobs:
           chmod 600 ~/.ssh/treetopia_deploy_key
           ssh-keyscan -H "$AWS_HOST" >> ~/.ssh/known_hosts
 
-          scp -i ~/.ssh/treetopia_deploy_key treetopia.tar.gz "$AWS_USER@$AWS_HOST:/tmp/treetopia.tar.gz"
+          scp -i ~/.ssh/treetopia_deploy_key /tmp/treetopia.tar.gz "$AWS_USER@$AWS_HOST:/tmp/treetopia.tar.gz"
 
           ssh -i ~/.ssh/treetopia_deploy_key "$AWS_USER@$AWS_HOST" "RELEASE='$RELEASE' bash -s" <<'REMOTE'
           set -euo pipefail
