@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sprite Editor — Growtopia Clone</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{ --bg:#1b2330; --panel:#243044; --panel2:#2e3c54; --accent:#5aa83a; --accent2:#3a7bd5; --gold:#f2c531; --text:#e8edf4; --muted:#9fb0c5; }
+  body{ font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; }
+  h1{ font-size:18px; letter-spacing:1px; padding:10px 16px; }
+  h1 span{ color:var(--accent); }
+  .app{ display:grid; grid-template-columns:230px 1fr 250px; gap:12px; height:calc(100vh - 44px); padding:0 12px 12px; }
+  .col{ background:var(--panel); border-radius:12px; padding:12px; overflow-y:auto; }
+  .stage{ background:var(--panel); border-radius:12px; display:flex; align-items:center; justify-content:center; position:relative; }
+  h3{ font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:14px 0 8px; }
+  h3:first-child{ margin-top:0; }
+  button,select,input{ font-family:inherit; }
+  .btn{ display:block; width:100%; text-align:left; padding:9px 12px; margin-bottom:6px; border:1px solid rgba(255,255,255,.1); border-radius:9px; background:var(--panel2); color:var(--text); cursor:pointer; font-size:14px; }
+  .btn:hover{ background:#3a4a66; }
+  .btn.active{ border-color:var(--gold); background:#3a4a66; }
+  .btn.go{ background:linear-gradient(180deg,#6cbf48,var(--accent)); border:none; text-align:center; font-weight:600; }
+  .btn.alt{ background:linear-gradient(180deg,#4f93e6,var(--accent2)); border:none; text-align:center; font-weight:600; }
+  .row{ display:flex; gap:6px; flex-wrap:wrap; }
+  .row .btn{ flex:1; text-align:center; }
+  label.field{ display:block; font-size:13px; color:var(--muted); margin:8px 0 4px; }
+  input[type=text]{ width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background:#1a2230; color:var(--text); }
+  input[type=color]{ width:100%; height:38px; border:none; border-radius:8px; background:none; cursor:pointer; }
+  .swatches{ display:grid; grid-template-columns:repeat(8,1fr); gap:4px; }
+  .sw{ width:100%; aspect-ratio:1; border-radius:5px; cursor:pointer; border:2px solid transparent; }
+  .sw:hover{ border-color:#fff; }
+  .sw.sel{ border-color:var(--gold); }
+  .toggle{ display:flex; align-items:center; justify-content:space-between; padding:7px 0; font-size:14px; }
+  .toggle input{ width:16px; height:16px; }
+  canvas{ image-rendering:pixelated; background:#11161f; border-radius:6px; }
+  #editCanvas{ cursor:crosshair; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  .previewWrap{ display:flex; gap:14px; align-items:flex-end; justify-content:center; padding:8px; background:#11161f; border-radius:8px; }
+  .previewWrap div{ text-align:center; font-size:11px; color:var(--muted); }
+  textarea{ width:100%; height:150px; font-family:ui-monospace,Consolas,monospace; font-size:11px; background:#11161f; color:#cfe; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:8px; resize:vertical; white-space:pre; }
+  .hint{ font-size:11px; color:var(--muted); margin-top:6px; line-height:1.4; }
+  .statusbar{ position:absolute; bottom:8px; left:12px; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>🎨 Sprite Editor <span>· Growtopia Clone</span></h1>
+  <div class="app">
+
+    <!-- LEFT: tools + colour -->
+    <div class="col">
+      <h3>Template</h3>
+      <select id="template" class="btn" style="text-align:left">
+        <option value="block">Block — 16×16</option>
+        <option value="tile">Tile (hi-res) — 32×32</option>
+        <option value="icon">Item icon — 16×16</option>
+        <option value="clothing">Clothing — on character 20×28</option>
+      </select>
+
+      <h3>Tools</h3>
+      <button class="btn tool active" data-tool="pencil">✏️ Pencil <small>(B)</small></button>
+      <button class="btn tool" data-tool="eraser">🧽 Eraser <small>(E)</small></button>
+      <button class="btn tool" data-tool="fill">🪣 Fill <small>(G)</small></button>
+      <button class="btn tool" data-tool="picker">💧 Eyedropper <small>(I)</small></button>
+      <div class="row">
+        <button class="btn" id="undoBtn">↶ Undo</button>
+        <button class="btn" id="redoBtn">↷ Redo</button>
+      </div>
+      <button class="btn" id="clearBtn">🗑️ Clear all</button>
+
+      <h3>Colour</h3>
+      <input type="color" id="color" value="#7a4a23" />
+      <div class="swatches" id="swatches"></div>
+    </div>
+
+    <!-- CENTER: canvas -->
+    <div class="stage">
+      <canvas id="editCanvas"></canvas>
+      <div class="statusbar" id="status">16 × 16</div>
+    </div>
+
+    <!-- RIGHT: options + preview + export -->
+    <div class="col">
+      <h3>Options</h3>
+      <label class="toggle">Show grid <input type="checkbox" id="optGrid" checked></label>
+      <label class="toggle">Horizontal symmetry <input type="checkbox" id="optSym"></label>
+      <label class="toggle">Onion-skin character <input type="checkbox" id="optOnion"></label>
+
+      <h3>Preview (actual size)</h3>
+      <div class="previewWrap">
+        <div><canvas id="prev1"></canvas><br>1×</div>
+        <div><canvas id="prev4"></canvas><br>4×</div>
+      </div>
+
+      <h3>Item name</h3>
+      <input type="text" id="name" value="myblock" />
+
+      <h3>Export</h3>
+      <button class="btn go" id="pngBtn">⬇️ Download PNG</button>
+      <button class="btn alt" id="copyBtn">📋 Copy text (for Claude)</button>
+      <button class="btn" id="loadBtn">📥 Load from text below</button>
+      <textarea id="io" spellcheck="false" placeholder="Exported sprite text appears here. Paste text + click Load to edit it again."></textarea>
+      <div class="hint">“Copy text” gives a readable legend+grid you can paste to Claude to turn into a real game sprite. “Download PNG” saves it at native pixel size.</div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const TEMPLATES = {
+    block:    { w:16, h:16, onion:false },
+    tile:     { w:32, h:32, onion:false },
+    icon:     { w:16, h:16, onion:false },
+    clothing: { w:20, h:28, onion:true  },
+  };
+  const PALETTE = [
+    '#7a4a23','#5c3717','#8f5a2e','#57a83a','#3f8029','#74c24e','#8a8d93','#686b71',
+    '#e3d28a','#c7b364','#9c4a3c','#bfe6f2','#e2591f','#ffc24a','#f2c531','#2c2c34',
+    '#f4cda0','#d9aa78','#5a3a1b','#3a7bd5','#2b5fa6','#d24a4a','#ffffff','#000000',
+  ];
+
+  const $ = id => document.getElementById(id);
+  const editC = $('editCanvas'), ectx = editC.getContext('2d');
+  const prev1 = $('prev1'), p1 = prev1.getContext('2d');
+  const prev4 = $('prev4'), p4 = prev4.getContext('2d');
+
+  let W=16, H=16, cell=30, onionOn=false;
+  let grid;                       // grid[y][x] = '#rrggbb' or null
+  let tool='pencil', color='#7a4a23';
+  let undoStack=[], redoStack=[];
+  let drawing=false, lastCx=-1, lastCy=-1;
+
+  function blank(w,h){ return Array.from({length:h},()=>Array(w).fill(null)); }
+
+  function setTemplate(key){
+    const t = TEMPLATES[key];
+    W=t.w; H=t.h; onionOn=t.onion;
+    $('optOnion').checked = t.onion;
+    grid = blank(W,H);
+    undoStack=[]; redoStack=[];
+    layout();
+    render();
+  }
+
+  function layout(){
+    const maxW=480, maxH=560;
+    cell = Math.max(4, Math.floor(Math.min(maxW/W, maxH/H)));
+    editC.width = W*cell; editC.height = H*cell;
+    prev1.width=W; prev1.height=H;
+    prev4.width=W*4; prev4.height=H*4;
+    $('status').textContent = W+' × '+H;
+  }
+
+  // ---------- onion-skin character (matches the game's 20×28 player) ----------
+  function drawOnion(ctx, sc){
+    if(!onionOn) return;
+    ctx.save(); ctx.globalAlpha=0.30;
+    const R=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(x*sc,y*sc,w*sc,h*sc); };
+    R(4,1,12,4,'#5a3a1b');     // hair
+    R(4,4,12,8,'#f4cda0');     // head
+    R(7,6,3,4,'#ffffff'); R(11,6,3,4,'#ffffff'); // eyes
+    R(4,12,12,9,'#3a7bd5');    // shirt
+    R(2,12,2,7,'#f4cda0'); R(16,12,2,7,'#f4cda0'); // arms
+    R(6,21,3,6,'#39414f'); R(11,21,3,6,'#39414f'); // legs
+    ctx.restore();
+  }
+
+  // ---------- rendering ----------
+  function render(){
+    ectx.clearRect(0,0,editC.width,editC.height);
+    // checkerboard for transparency
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      ectx.fillStyle = ((x+y)&1)? '#1a2230' : '#222d3e';
+      ectx.fillRect(x*cell,y*cell,cell,cell);
+    }
+    drawOnion(ectx, cell);
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      if(grid[y][x]){ ectx.fillStyle=grid[y][x]; ectx.fillRect(x*cell,y*cell,cell,cell); }
+    }
+    if($('optGrid').checked && cell>=8){
+      ectx.strokeStyle='rgba(255,255,255,.08)'; ectx.lineWidth=1;
+      for(let x=0;x<=W;x++){ ectx.beginPath(); ectx.moveTo(x*cell+.5,0); ectx.lineTo(x*cell+.5,H*cell); ectx.stroke(); }
+      for(let y=0;y<=H;y++){ ectx.beginPath(); ectx.moveTo(0,y*cell+.5); ectx.lineTo(W*cell,y*cell+.5); ectx.stroke(); }
+    }
+    renderPreview();
+  }
+  function renderPreview(){
+    for(const [ctx,c,s] of [[p1,prev1,1],[p4,prev4,4]]){
+      ctx.clearRect(0,0,c.width,c.height);
+      for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+        ctx.fillStyle = ((x+y)&1)? '#1a2230':'#222d3e'; ctx.fillRect(x*s,y*s,s,s);
+        if(grid[y][x]){ ctx.fillStyle=grid[y][x]; ctx.fillRect(x*s,y*s,s,s); }
+      }
+    }
+  }
+
+  // ---------- editing ----------
+  function pushUndo(){ undoStack.push(grid.map(r=>r.slice())); if(undoStack.length>60) undoStack.shift(); redoStack=[]; }
+  function setCell(x,y,c){
+    if(x<0||y<0||x>=W||y>=H) return;
+    grid[y][x]=c;
+    if($('optSym').checked) grid[y][W-1-x]=c;
+  }
+  function applyAt(cx,cy){
+    if(tool==='pencil') setCell(cx,cy,color);
+    else if(tool==='eraser') setCell(cx,cy,null);
+    else if(tool==='fill') flood(cx,cy);
+    else if(tool==='picker'){ const c=grid[cy]&&grid[cy][cx]; if(c){ color=c; $('color').value=c; selectSwatch(); } }
+  }
+  function flood(cx,cy){
+    const target = grid[cy][cx]; if(target===color) return;
+    const stack=[[cx,cy]];
+    while(stack.length){
+      const [x,y]=stack.pop();
+      if(x<0||y<0||x>=W||y>=H) continue;
+      if(grid[y][x]!==target) continue;
+      grid[y][x]=color;
+      stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+    }
+  }
+  function line(x0,y0,x1,y1){ // paint along drag to avoid gaps
+    const dx=Math.abs(x1-x0), dy=Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1;
+    let err=dx-dy;
+    while(true){ applyAt(x0,y0); if(x0===x1&&y0===y1) break; const e2=2*err; if(e2>-dy){err-=dy;x0+=sx;} if(e2<dx){err+=dx;y0+=sy;} }
+  }
+  function cellAt(e){
+    const r=editC.getBoundingClientRect();
+    return [Math.floor((e.clientX-r.left)/cell), Math.floor((e.clientY-r.top)/cell)];
+  }
+
+  editC.addEventListener('mousedown', e=>{
+    e.preventDefault();
+    const [cx,cy]=cellAt(e);
+    if(tool!=='picker') pushUndo();
+    drawing=true; lastCx=cx; lastCy=cy;
+    applyAt(cx,cy); render();
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!drawing) return;
+    const [cx,cy]=cellAt(e);
+    if(cx===lastCx&&cy===lastCy) return;
+    if(tool==='pencil'||tool==='eraser') line(lastCx,lastCy,cx,cy);
+    else applyAt(cx,cy);
+    lastCx=cx; lastCy=cy; render();
+  });
+  window.addEventListener('mouseup', ()=>{ drawing=false; });
+
+  // ---------- palette / tools ----------
+  function buildSwatches(){
+    const wrap=$('swatches'); wrap.innerHTML='';
+    PALETTE.forEach(c=>{
+      const d=document.createElement('div'); d.className='sw'; d.style.background=c; d.dataset.c=c;
+      d.onclick=()=>{ color=c; $('color').value=c; selectSwatch(); };
+      wrap.appendChild(d);
+    });
+  }
+  function selectSwatch(){ document.querySelectorAll('.sw').forEach(s=>s.classList.toggle('sel', s.dataset.c===color)); }
+  $('color').addEventListener('input', e=>{ color=e.target.value; selectSwatch(); });
+  document.querySelectorAll('.tool').forEach(b=> b.onclick=()=>{ tool=b.dataset.tool; document.querySelectorAll('.tool').forEach(x=>x.classList.toggle('active',x===b)); });
+  $('template').onchange = e=> setTemplate(e.target.value);
+  $('optGrid').onchange = render; $('optSym').onchange = render;
+  $('optOnion').onchange = e=>{ onionOn=e.target.checked; render(); };
+  $('clearBtn').onclick = ()=>{ pushUndo(); grid=blank(W,H); render(); };
+  $('undoBtn').onclick = ()=>{ if(undoStack.length){ redoStack.push(grid.map(r=>r.slice())); grid=undoStack.pop(); render(); } };
+  $('redoBtn').onclick = ()=>{ if(redoStack.length){ undoStack.push(grid.map(r=>r.slice())); grid=redoStack.pop(); render(); } };
+
+  window.addEventListener('keydown', e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+    const k=e.key.toLowerCase();
+    if((e.ctrlKey||e.metaKey)&&k==='z'){ e.preventDefault(); $('undoBtn').click(); return; }
+    if((e.ctrlKey||e.metaKey)&&k==='y'){ e.preventDefault(); $('redoBtn').click(); return; }
+    const map={b:'pencil',e:'eraser',g:'fill',i:'picker'};
+    if(map[k]){ tool=map[k]; document.querySelectorAll('.tool').forEach(x=>x.classList.toggle('active',x.dataset.tool===tool)); }
+  });
+
+  // ---------- export ----------
+  function exportText(){
+    const colors=[]; const idx=new Map();
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const c=grid[y][x]; if(c&&!idx.has(c)){ idx.set(c,colors.length); colors.push(c); } }
+    const CH='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let out='# Growtopia Clone sprite\n';
+    out+='name: '+($('name').value||'sprite')+'\n';
+    out+='size: '+W+'x'+H+'\n';
+    out+='legend:\n. transparent\n';
+    colors.forEach((c,i)=> out+=CH[i]+' '+c+'\n');
+    out+='grid:\n';
+    for(let y=0;y<H;y++){ let row=''; for(let x=0;x<W;x++){ const c=grid[y][x]; row+= c? CH[idx.get(c)] : '.'; } out+=row+'\n'; }
+    return out;
+  }
+  function loadText(txt){
+    try{
+      const lines=txt.replace(/\r/g,'').split('\n');
+      let i=0, w=0,h=0; const legend={'.':null};
+      for(;i<lines.length;i++){ const l=lines[i].trim();
+        if(l.startsWith('name:')) $('name').value=l.slice(5).trim();
+        else if(l.startsWith('size:')){ const m=l.slice(5).trim().split('x'); w=+m[0]; h=+m[1]; }
+        else if(l==='legend:'){ i++; break; } }
+      for(;i<lines.length;i++){ const l=lines[i]; if(l.trim()==='grid:'){ i++; break; }
+        if(!l.trim()) continue; const ch=l[0]; const val=l.slice(2).trim(); legend[ch]= val==='transparent'? null : val; }
+      const rows=[]; for(;i<lines.length && rows.length<h;i++){ if(lines[i].length) rows.push(lines[i]); }
+      W=w; H=h; grid=blank(W,H);
+      for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const ch=rows[y]&&rows[y][x]; grid[y][x]= (ch&&legend[ch]!==undefined)? legend[ch] : null; }
+      layout(); render();
+    }catch(err){ alert('Could not parse the sprite text.'); }
+  }
+  function exportPNG(){
+    const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
+    for(let y=0;y<H;y++) for(let xx=0;xx<W;xx++){ if(grid[y][xx]){ x.fillStyle=grid[y][xx]; x.fillRect(xx,y,1,1); } }
+    const a=document.createElement('a'); a.download=($('name').value||'sprite')+'.png'; a.href=c.toDataURL('image/png'); a.click();
+  }
+  $('pngBtn').onclick = exportPNG;
+  $('copyBtn').onclick = ()=>{ const t=exportText(); $('io').value=t; $('io').select(); try{ navigator.clipboard.writeText(t); }catch(e){} };
+  $('loadBtn').onclick = ()=>{ if($('io').value.trim()) loadText($('io').value); };
+
+  // ---------- boot ----------
+  buildSwatches(); selectSwatch(); setTemplate('block');
+})();
+</script>
+</body>
+</html>

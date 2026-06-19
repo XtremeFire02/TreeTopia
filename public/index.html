@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Growtopia Clone</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- ====== Login / account screen ====== -->
+  <div id="login" class="screen">
+    <div class="panel">
+      <h1 class="logo">🌱 GROWTOPIA <span>CLONE</span></h1>
+      <p class="tagline">A 2D MMO sandbox — build, farm, trade.</p>
+      <input id="nameInput" maxlength="16" placeholder="Username" autocomplete="off" />
+      <input id="passInput" type="password" maxlength="40" placeholder="Password" autocomplete="off" />
+      <div id="authError" class="auth-error hidden"></div>
+      <div class="login-btns">
+        <button id="loginBtn" class="big-btn">Log In</button>
+        <button id="registerBtn" class="big-btn alt">Create Account</button>
+      </div>
+      <button id="guestBtn" class="ghost-btn wide">Play as Guest</button>
+      <p class="hint">Accounts are saved on the server so your gems, items &amp; achievements persist.</p>
+    </div>
+  </div>
+
+  <!-- ====== World selection screen ====== -->
+  <div id="worldSelect" class="screen hidden">
+    <div class="panel wide">
+      <h2>🌍 Select a World</h2>
+      <div class="world-create">
+        <input id="worldNameInput" maxlength="18" placeholder="World name (e.g. MYWORLD)" autocomplete="off" />
+        <button id="enterWorldBtn" class="big-btn">Go</button>
+      </div>
+      <div class="subhead">Active worlds</div>
+      <div id="worldList" class="world-list"></div>
+      <div class="row-right">
+        <button id="logoutBtn" class="ghost-btn">Log out</button>
+        <button id="refreshWorldsBtn" class="ghost-btn">↻ Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Game ====== -->
+  <div id="game" class="screen hidden">
+    <canvas id="canvas"></canvas>
+
+    <!-- top HUD -->
+    <div id="hud">
+      <div class="hud-left">
+        <span id="worldLabel" class="chip">WORLD</span>
+        <span id="ownerLabel" class="chip ghost"></span>
+      </div>
+      <div class="hud-right">
+        <span class="chip gems"><span id="gemCount">0</span> 💎</span>
+        <button id="shopBtn" class="hud-btn">🛒 Shop</button>
+        <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
+        <button id="exitBtn" class="hud-btn">🚪 Exit</button>
+      </div>
+    </div>
+
+    <!-- DOM overlay layer for player name tags + wrench buttons -->
+    <div id="playerTags"></div>
+
+    <!-- chat -->
+    <div id="chatBox">
+      <div id="chatLog"></div>
+      <input id="chatInput" maxlength="120" placeholder="Press Enter to chat…" />
+    </div>
+
+    <!-- toast notifications -->
+    <div id="toasts"></div>
+
+    <!-- death overlay -->
+    <div id="deathOverlay" class="overlay hidden"><div class="death-text">💀 You died!</div></div>
+
+    <!-- drag-up inventory drawer -->
+    <div id="invDrawer" class="collapsed">
+      <div id="drawerNotch" title="Drag up to open inventory"><span class="notch-bar"></span></div>
+      <div id="drawerBody">
+        <h4 class="drawer-title">🎒 Inventory</h4>
+        <div id="inventoryGrid" class="item-grid"></div>
+        <div class="splice-area">
+          <h4>🧬 Splice Seeds</h4>
+          <div class="splice-row">
+            <select id="spliceA"></select> + <select id="spliceB"></select>
+            <button id="spliceBtn" class="big-btn small">Splice</button>
+          </div>
+          <p class="hint">Combine two seeds to discover new ones.</p>
+        </div>
+      </div>
+      <div id="hotbar"></div>
+    </div>
+
+    <!-- controls help -->
+    <div id="controls">
+      ⬅➡ move · ⬆/Space jump (double-jump w/ Wings) · L-click punch · R-click place ·
+      drag the notch ▲ for inventory · select 🔧 then click a player to inspect · R respawn
+    </div>
+  </div>
+
+  <!-- ====== Modals ====== -->
+  <div id="modalBackdrop" class="hidden">
+    <!-- Shop -->
+    <div id="shopModal" class="modal hidden">
+      <div class="modal-head"><h3>🛒 Shop</h3><button class="close-x" data-close>✕</button></div>
+      <div class="shop-toolbar">
+        <input id="shopSearch" placeholder="Search 800+ items…" autocomplete="off" />
+        <select id="shopCategory"></select>
+        <span class="shop-gems">💎 <b id="shopGems">0</b></span>
+      </div>
+      <div id="shopGrid" class="item-grid"></div>
+      <div id="shopNote" class="hint"></div>
+    </div>
+
+    <!-- Trade -->
+    <div id="tradeModal" class="modal hidden">
+      <div class="modal-head"><h3>🤝 Trade with <span id="tradePartner"></span></h3><button class="close-x" data-close-trade>✕</button></div>
+      <div class="trade-cols">
+        <div class="trade-col">
+          <h4>You offer</h4>
+          <div id="yourOffer" class="trade-offer"></div>
+          <div class="trade-gems">Gems: <input id="yourTradeGems" type="number" min="0" value="0" /></div>
+          <div class="add-item">Add: <select id="yourInvSelect"></select> x<input id="yourAddQty" type="number" min="1" value="1" /><button id="addTradeItem" class="ghost-btn">+</button></div>
+          <div id="yourConfirmTag" class="confirm-tag hidden">✔ You confirmed</div>
+        </div>
+        <div class="trade-col">
+          <h4>They offer</h4>
+          <div id="theirOffer" class="trade-offer"></div>
+          <div class="trade-gems">Gems: <b id="theirTradeGems">0</b></div>
+          <div id="theirConfirmTag" class="confirm-tag hidden">✔ Partner confirmed</div>
+        </div>
+      </div>
+      <div class="row-right">
+        <button id="tradeConfirmBtn" class="big-btn small">Confirm</button>
+        <button id="tradeCancelBtn" class="ghost-btn">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Admin/manage -->
+    <div id="adminModal" class="modal hidden">
+      <div class="modal-head"><h3>👑 Manage World</h3><button class="close-x" data-close>✕</button></div>
+      <p>Add a player as an admin so they can build inside your world.</p>
+      <div class="splice-row"><input id="adminNameInput" maxlength="16" placeholder="Player name" /><button id="addAdminBtn" class="big-btn small">Add Admin</button></div>
+      <div id="adminCurrent" class="hint"></div>
+    </div>
+
+    <!-- Player profile -->
+    <div id="profileModal" class="modal hidden">
+      <div class="modal-head"><h3>👤 <span id="profName"></span></h3><button class="close-x" data-close>✕</button></div>
+      <div id="profOnline" class="hint"></div>
+      <div class="prof-section"><h4>🏆 Achievements</h4><ul id="profAchievements" class="prof-list"></ul></div>
+      <div class="prof-section"><h4>🌍 Worlds Owned</h4><ul id="profWorlds" class="prof-list"></ul></div>
+      <div class="prof-section"><h4>✨ Effects</h4><ul id="profEffects" class="prof-list"></ul></div>
+      <div class="row-right"><button id="profTradeBtn" class="big-btn small hidden">🤝 Request Trade</button></div>
+    </div>
+
+    <!-- Trade request prompt -->
+    <div id="tradePrompt" class="modal small hidden">
+      <p id="tradePromptText"></p>
+      <div class="row-right"><button id="acceptTradeBtn" class="big-btn small">Accept</button><button id="declineTradeBtn" class="ghost-btn">Decline</button></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
