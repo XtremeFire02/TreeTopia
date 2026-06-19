@@ -1,6 +1,7 @@
 // All DOM-driven UI: HUD, drag-up inventory drawer, searchable shop, trade,
 // admin, player profiles (wrench), chat, toasts, account login.
 import { ITEMS, shopCatalog, categories, PERMANENT, isPlaceable } from './shared/items.js';
+import { isDeveloperName } from './shared/names.js';
 import { iconUrl } from './assets.js';
 import { setTyping } from './input.js';
 
@@ -52,7 +53,9 @@ export class UI {
   // ---------- entering a world ----------
   onEnterWorld(world) {
     $('worldLabel').textContent = world.name;
-    $('ownerLabel').textContent = world.owner ? `Owner: ${world.owner}` : 'Public world';
+    const ownerLabel = $('ownerLabel');
+    ownerLabel.textContent = world.owner ? `Owner: ${world.owner}` : 'Public world';
+    ownerLabel.classList.toggle('dev-name', isDeveloperName(world.owner));
     const mine = world.owner && world.owner === this.game.me.name;
     $('adminBtn').classList.toggle('hidden', !mine);
     this.onInventory();
@@ -148,7 +151,9 @@ export class UI {
   // ---------- player profile (wrench) ----------
   openProfile(id) { this._profileTargetId = id; this.net.send('getProfile', { id }); }
   onProfile(m) {
-    $('profName').textContent = m.name;
+    const profName = $('profName');
+    profName.textContent = m.name;
+    profName.classList.toggle('dev-name', isDeveloperName(m.name));
     $('profOnline').textContent = (m.online ? '🟢 Online' : '⚪ Offline') + ` · 💎 ${formatGems(m.gems)}`;
     const fill = (elId, arr, empty) => {
       const ul = $(elId); ul.innerHTML = '';
@@ -239,7 +244,10 @@ export class UI {
     const log = $('chatLog');
     const d = document.createElement('div');
     if (sys) d.innerHTML = `<span class="sys">${text}</span>`;
-    else d.innerHTML = `<span class="cname">${escapeHtml(name)}:</span> ${escapeHtml(text)}`;
+    else {
+      const nameClass = isDeveloperName(name) ? 'cname dev-name' : 'cname';
+      d.innerHTML = `<span class="${nameClass}">${escapeHtml(name)}:</span> ${escapeHtml(text)}`;
+    }
     log.appendChild(d); log.scrollTop = log.scrollHeight;
     while (log.children.length > 40) log.removeChild(log.firstChild);
   }

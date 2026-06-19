@@ -4,6 +4,7 @@ import {
   PLAYER_W, PLAYER_H, REACH, RESPAWN_MS, BREAK_RESET_MS,
 } from './shared/constants.js';
 import { ITEMS, isSolid, hasEffect, isPlaceable } from './shared/items.js';
+import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE, isDeveloperName } from './shared/names.js';
 import { keys, mouse } from './input.js';
 import { tileSprite, dropSprite, playerSprite } from './assets.js';
 
@@ -547,12 +548,17 @@ export class Game {
 
     // name tag
     if (name) {
+      const developer = isDeveloperName(name);
+      const nameFill = developer ? DEVELOPER_NAME_COLOR : '#fff';
+      const nameStroke = developer ? DEVELOPER_NAME_STROKE : 'rgba(0,0,0,.6)';
+      ctx.save();
       ctx.globalAlpha = alpha;
       ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 3;
+      ctx.fillStyle = nameFill; ctx.strokeStyle = nameStroke; ctx.lineWidth = developer ? 4 : 3;
+      if (developer) { ctx.shadowColor = 'rgba(184,134,11,.35)'; ctx.shadowBlur = 4; }
       ctx.strokeText(name, x, y - H - 4);
       ctx.fillText(name, x, y - H - 4);
-      ctx.globalAlpha = 1;
+      ctx.restore();
     }
   }
 }

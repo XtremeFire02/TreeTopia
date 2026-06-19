@@ -113,6 +113,11 @@ input:focus, select:focus { border-color: var(--accent2); }
 #chatLog { max-height: 150px; overflow-y: auto; font-size: 13px; margin-bottom: 6px; }
 #chatLog div { background: rgba(20,26,37,.55); padding: 3px 8px; border-radius: 6px; margin-top: 3px; }
 #chatLog .cname { color: var(--accent); font-weight: 600; }
+#chatLog .cname.dev-name, .dev-name {
+  color: #b8860b !important;
+  font-weight: 800;
+  text-shadow: 0 1px 0 #2b1d00, 0 0 8px rgba(184,134,11,.35);
+}
 #chatLog .sys { color: var(--gold); font-style: italic; }
 #chatInput { width: 100%; opacity: .5; transition: opacity .15s; margin: 0; }
 #chatInput:focus { opacity: 1; }
