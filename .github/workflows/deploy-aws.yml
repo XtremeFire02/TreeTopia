@@ -1,3 +1,4 @@
+```yaml
 name: Deploy to AWS EC2
 
 on:
@@ -34,7 +35,7 @@ jobs:
           : "${AWS_SSH_KEY:?Missing GitHub secret AWS_SSH_KEY}"
 
           mkdir -p ~/.ssh
-          printf '%s\n' "$AWS_SSH_KEY" > ~/.ssh/treetopia_deploy_key
+          printf '%s' "$AWS_SSH_KEY" | base64 -d > ~/.ssh/treetopia_deploy_key
           chmod 600 ~/.ssh/treetopia_deploy_key
           ssh-keyscan -H "$AWS_HOST" >> ~/.ssh/known_hosts
 
@@ -56,3 +57,4 @@ jobs:
           sudo systemctl restart treetopia
           sudo systemctl --no-pager --full status treetopia
           REMOTE
+```
