@@ -56,4 +56,3 @@ jobs:
           sudo systemctl restart treetopia
           sudo systemctl --no-pager --full status treetopia
           REMOTE
-```
