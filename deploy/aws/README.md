@@ -17,6 +17,10 @@ The script creates the EC2 instance, security group, Elastic IP, and SSH key pai
 After it prints the Elastic IP, add the printed values as GitHub Actions secrets and run
 the `Deploy to AWS EC2` workflow.
 
+If the `curl` command returns `404`, the repository is probably private. Either make the
+repo public temporarily, or copy `deploy/aws/provision-cloudshell.sh` from GitHub and
+paste it into CloudShell as a file before running it.
+
 ## Manual path: 1. Create the AWS server
 
 1. Open AWS EC2 and choose **Launch instance**.
