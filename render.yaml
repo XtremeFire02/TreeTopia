@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: treetopia
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm start
+    autoDeployTrigger: commit
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: treetopia-data
+      mountPath: /var/data
+      sizeGB: 1

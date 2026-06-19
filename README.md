@@ -15,6 +15,22 @@ Open **http://localhost:3000** in your browser. To play multiplayer, open a seco
 or another machine on your network and enter the **same world name**. Logging in with the
 same player name on another tab reuses your saved gems & inventory.
 
+## 24/7 hosting
+
+This repo includes `render.yaml` for a Render Web Service named `treetopia`.
+
+Use a paid Render web service with the included persistent disk. Free web services spin
+down and do not preserve local filesystem data, which is not suitable for this game.
+
+1. Push changes to `main` on GitHub.
+2. In Render, create a new Blueprint from `XtremeFire02/TreeTopia`.
+3. Confirm the service uses `render.yaml`.
+4. Keep the persistent disk mounted at `/var/data`.
+5. Share the permanent `https://treetopia.onrender.com` URL, or attach your own domain.
+
+Every push to `main` deploys the latest code automatically. Runtime account/profile/world
+data is written to `DATA_DIR` (`/var/data` on Render), not to the Git repository.
+
 ## Controls
 
 | Action | Keys |

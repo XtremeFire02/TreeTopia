@@ -28,11 +28,12 @@ const ACHIEVEMENTS = {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
-const DATA = path.join(__dirname, 'data');
+const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 const WORLDS_DIR = path.join(DATA, 'worlds');
 const PROFILES_FILE = path.join(DATA, 'profiles.json');
 const ACCOUNTS_FILE = path.join(DATA, 'accounts.json');
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const DEV_ACCOUNTS = new Set(['XtremeFire']);
 const DEV_GEM_BALANCE = Number.MAX_SAFE_INTEGER;
 
@@ -705,6 +706,6 @@ setInterval(() => {
   }
 }, 30000);
 
-server.listen(PORT, () => {
-  console.log(`\n  🌱 Growtopia Clone running:  http://localhost:${PORT}\n`);
+server.listen(PORT, HOST, () => {
+  console.log(`\n  🌱 Growtopia Clone running:  http://${HOST}:${PORT}\n`);
 });
