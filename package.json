@@ -1,0 +1,13 @@
+{
+  "name": "growtopia-clone",
+  "version": "1.0.0",
+  "description": "A 2D MMO sandbox game inspired by Growtopia",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
