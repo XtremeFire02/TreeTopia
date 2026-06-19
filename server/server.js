@@ -37,6 +37,8 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DEV_ACCOUNT_NAME = '@XtremeFire';
 const DEV_ACCOUNTS = new Set([DEV_ACCOUNT_NAME.toLowerCase()]);
 const DEV_GEM_BALANCE = Number.MAX_SAFE_INTEGER;
+const REGULAR_NAME_RE = /^[A-Za-z0-9]{3,16}$/;
+const USERNAME_RULE_TEXT = 'Names must be 3-16 letters or numbers only. No spaces or special characters.';
 
 fs.mkdirSync(WORLDS_DIR, { recursive: true });
 
@@ -118,10 +120,21 @@ function publicPlayer(p) {
 function normalizeAccountName(name) { return String(name || '').toLowerCase(); }
 function isReservedDeveloperName(name) { return DEV_ACCOUNTS.has(normalizeAccountName(name)); }
 function canonicalAccountName(name) {
-  const clean = String(name || '').trim().replace(/[^A-Za-z0-9_@]/g, '').slice(0, 16);
+  const clean = String(name || '').trim();
   return isReservedDeveloperName(clean) ? DEV_ACCOUNT_NAME : clean;
 }
-function hasReservedAt(name) { return String(name || '').includes('@'); }
+function validateAccountName(name, { allowDeveloper = false, allowEmpty = false } = {}) {
+  const clean = canonicalAccountName(name);
+  if (!clean) return { name: clean, error: allowEmpty ? null : USERNAME_RULE_TEXT };
+  if (isReservedDeveloperName(clean)) {
+    return allowDeveloper
+      ? { name: DEV_ACCOUNT_NAME, error: null }
+      : { name: clean, error: 'The @XtremeFire developer account must be created by the server owner.' };
+  }
+  if (clean.includes('@')) return { name: clean, error: 'Only @XtremeFire can use @ in a name.' };
+  if (!REGULAR_NAME_RE.test(clean)) return { name: clean, error: USERNAME_RULE_TEXT };
+  return { name: clean, error: null };
+}
 function isDeveloperName(name) { return isReservedDeveloperName(name) && !!accounts[DEV_ACCOUNT_NAME]; }
 function isDeveloper(p) { return !!(p && isDeveloperName(p.name)); }
 function gemBalance(p) { return isDeveloper(p) ? DEV_GEM_BALANCE : (p.gems || 0); }
@@ -160,7 +173,6 @@ function handle(p, msg) {
 }
 
 // ---------- accounts / login / profiles ----------
-function sanitizeName(n) { return canonicalAccountName(n); }
 
 function loginSuccess(p, name) {
   if ([...players.values()].some((pl) => pl !== p && pl.name === name)) {
@@ -186,16 +198,20 @@ function loginSuccess(p, name) {
 }
 
 function onJoin(p, msg) {            // guest login (no password)
-  const name = sanitizeName(msg.name) || ('Guest' + p.id);
-  if (hasReservedAt(name)) return toPlayer(p, 'authError', { text: 'Names with @ are reserved for the developer account.' });
+  const requestedName = String(msg.name || '').trim();
+  let name = 'Guest' + p.id;
+  if (requestedName) {
+    const result = validateAccountName(requestedName);
+    if (result.error) return toPlayer(p, 'authError', { text: result.error });
+    name = result.name;
+  }
   if (accounts[name]) return toPlayer(p, 'authError', { text: 'That name is registered. Please log in.' });
   loginSuccess(p, name);
 }
 
 function onRegister(p, msg) {
-  const name = sanitizeName(msg.name);
-  if (name.length < 3) return toPlayer(p, 'authError', { text: 'Name needs 3+ letters or numbers.' });
-  if (hasReservedAt(name)) return toPlayer(p, 'authError', { text: 'The @XtremeFire developer account must be created by the server owner.' });
+  const { name, error } = validateAccountName(msg.name);
+  if (error) return toPlayer(p, 'authError', { text: error });
   if (String(msg.password || '').length < 4) return toPlayer(p, 'authError', { text: 'Password needs 4+ characters.' });
   if (accounts[name]) return toPlayer(p, 'authError', { text: 'That name is already taken.' });
   accounts[name] = hashPw(String(msg.password));
@@ -204,10 +220,8 @@ function onRegister(p, msg) {
 }
 
 function onLogin(p, msg) {
-  const name = sanitizeName(msg.name);
-  if (hasReservedAt(name) && !isReservedDeveloperName(name)) {
-    return toPlayer(p, 'authError', { text: 'Only @XtremeFire can use @ in a name.' });
-  }
+  const { name, error } = validateAccountName(msg.name, { allowDeveloper: true });
+  if (error) return toPlayer(p, 'authError', { text: error });
   if (isReservedDeveloperName(name) && !accounts[DEV_ACCOUNT_NAME]) {
     return toPlayer(p, 'authError', { text: 'The @XtremeFire developer account has not been created on this server yet.' });
   }
@@ -221,7 +235,11 @@ function onLogin(p, msg) {
 function onGetProfile(p, msg) {
   let name = null;
   if (msg.id != null) { const t = players.get(msg.id); if (t) name = t.name; }
-  if (!name && msg.name) name = sanitizeName(msg.name);
+  if (!name && msg.name) {
+    const result = validateAccountName(msg.name, { allowDeveloper: true });
+    if (result.error) return;
+    name = result.name;
+  }
   if (!name) return;
   const online = [...players.values()].find((pl) => pl.name === name);
   const prof = online ? { gems: gemBalance(online), inventory: online.inventory, achievements: online.achievements, ownedWorlds: online.ownedWorlds } : (profiles[name] || {});
@@ -525,7 +543,8 @@ function onSplice(p, msg) {
 function onAddAdmin(p, msg) {
   const w = worlds.get(p.world); if (!w) return;
   if (w.owner !== p.name) return toPlayer(p, 'notify', { text: 'Only the world owner can add admins.' });
-  const name = String(msg.name || '').trim().replace(/[^A-Za-z0-9_ ]/g, '').slice(0, 16);
+  const { name, error } = validateAccountName(msg.name, { allowDeveloper: true });
+  if (error) return toPlayer(p, 'notify', { text: error });
   if (!name || name === p.name) return;
   if (!w.admins.includes(name)) w.admins.push(name);
   // sync to the world-lock tile data
