@@ -34,7 +34,8 @@ const PROFILES_FILE = path.join(DATA, 'profiles.json');
 const ACCOUNTS_FILE = path.join(DATA, 'accounts.json');
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const DEV_ACCOUNTS = new Set(['xtremefire']);
+const DEV_ACCOUNT_NAME = '@XtremeFire';
+const DEV_ACCOUNTS = new Set([DEV_ACCOUNT_NAME.toLowerCase()]);
 const DEV_GEM_BALANCE = Number.MAX_SAFE_INTEGER;
 
 fs.mkdirSync(WORLDS_DIR, { recursive: true });
@@ -115,7 +116,13 @@ function publicPlayer(p) {
 }
 
 function normalizeAccountName(name) { return String(name || '').toLowerCase(); }
-function isDeveloperName(name) { return DEV_ACCOUNTS.has(normalizeAccountName(name)) && !!accounts[name]; }
+function isReservedDeveloperName(name) { return DEV_ACCOUNTS.has(normalizeAccountName(name)); }
+function canonicalAccountName(name) {
+  const clean = String(name || '').trim().replace(/[^A-Za-z0-9_@]/g, '').slice(0, 16);
+  return isReservedDeveloperName(clean) ? DEV_ACCOUNT_NAME : clean;
+}
+function hasReservedAt(name) { return String(name || '').includes('@'); }
+function isDeveloperName(name) { return isReservedDeveloperName(name) && !!accounts[DEV_ACCOUNT_NAME]; }
 function isDeveloper(p) { return !!(p && isDeveloperName(p.name)); }
 function gemBalance(p) { return isDeveloper(p) ? DEV_GEM_BALANCE : (p.gems || 0); }
 function canAffordGems(p, amount) { return isDeveloper(p) || (p.gems || 0) >= amount; }
@@ -153,7 +160,7 @@ function handle(p, msg) {
 }
 
 // ---------- accounts / login / profiles ----------
-function sanitizeName(n) { return String(n || '').trim().replace(/[^A-Za-z0-9_]/g, '').slice(0, 16); }
+function sanitizeName(n) { return canonicalAccountName(n); }
 
 function loginSuccess(p, name) {
   if ([...players.values()].some((pl) => pl !== p && pl.name === name)) {
@@ -180,6 +187,7 @@ function loginSuccess(p, name) {
 
 function onJoin(p, msg) {            // guest login (no password)
   const name = sanitizeName(msg.name) || ('Guest' + p.id);
+  if (hasReservedAt(name)) return toPlayer(p, 'authError', { text: 'Names with @ are reserved for the developer account.' });
   if (accounts[name]) return toPlayer(p, 'authError', { text: 'That name is registered. Please log in.' });
   loginSuccess(p, name);
 }
@@ -187,6 +195,7 @@ function onJoin(p, msg) {            // guest login (no password)
 function onRegister(p, msg) {
   const name = sanitizeName(msg.name);
   if (name.length < 3) return toPlayer(p, 'authError', { text: 'Name needs 3+ letters or numbers.' });
+  if (hasReservedAt(name)) return toPlayer(p, 'authError', { text: 'The @XtremeFire developer account must be created by the server owner.' });
   if (String(msg.password || '').length < 4) return toPlayer(p, 'authError', { text: 'Password needs 4+ characters.' });
   if (accounts[name]) return toPlayer(p, 'authError', { text: 'That name is already taken.' });
   accounts[name] = hashPw(String(msg.password));
@@ -196,6 +205,12 @@ function onRegister(p, msg) {
 
 function onLogin(p, msg) {
   const name = sanitizeName(msg.name);
+  if (hasReservedAt(name) && !isReservedDeveloperName(name)) {
+    return toPlayer(p, 'authError', { text: 'Only @XtremeFire can use @ in a name.' });
+  }
+  if (isReservedDeveloperName(name) && !accounts[DEV_ACCOUNT_NAME]) {
+    return toPlayer(p, 'authError', { text: 'The @XtremeFire developer account has not been created on this server yet.' });
+  }
   const acc = accounts[name];
   if (!acc || !verifyPw(String(msg.password || ''), acc)) {
     return toPlayer(p, 'authError', { text: 'Wrong name or password.' });

@@ -116,6 +116,14 @@ sudo journalctl -u treetopia -f
 sudo systemctl restart treetopia
 ```
 
+Create or reset the reserved developer account:
+
+```bash
+cd /opt/treetopia/current
+DATA_DIR=/var/lib/treetopia node tools/set-dev-account.mjs "your-new-password"
+sudo systemctl restart treetopia
+```
+
 Back up game data:
 
 ```bash
