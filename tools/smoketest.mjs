@@ -118,11 +118,21 @@ const RID = Math.random().toString(36).slice(2, 7);
   const notify = await b.wait('notify').catch(() => null);
   ok(notify && /lock/i.test(notify.text), 'intruder is blocked by the lock');
 
-  // --- main door cannot be broken ---
+  // --- main door cannot be broken (when standing beside it, not on it) ---
   a.clear();
+  a.send('move', { x: (sx + 2) * 32 + 16, y: sy * 32 + 32, vx: 0, vy: 0, dir: 1, anim: 'idle', name: 'Tester' });
+  await sleep(60);
   a.send('break', { x: sx, y: sy });
   const doorNotify = await a.wait('notify').catch(() => null);
-  ok(doorNotify && /door/i.test(doorNotify.text), 'main door cannot be broken');
+  ok(doorNotify && /door/i.test(doorNotify.text), 'main door cannot be broken from beside it');
+
+  // --- standing ON the door and punching exits the world ---
+  a.clear();
+  a.send('move', { x: sx * 32 + 16, y: sy * 32 + 32, vx: 0, vy: 0, dir: 1, anim: 'idle', name: 'Tester' });
+  await sleep(60);
+  a.send('break', { x: sx, y: sy });
+  const exited = await a.wait('kickedFromWorld').catch(() => null);
+  ok(!!exited, 'punching the door while standing on it exits the world');
 
   // --- accounts: register + login with password ---
   const uname = 'Acc' + RID, pw = 'pw' + RID;

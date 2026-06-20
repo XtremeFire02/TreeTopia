@@ -456,7 +456,11 @@ function onBreak(p, msg) {
 
   const def = ITEMS[fg];
   if (!def) return;
-  if (w.data[i] && w.data[i].main) { return toPlayer(p, 'notify', { text: "The world's main door can't be broken." }); }
+  if (w.data[i] && w.data[i].main) {
+    // punching the world's main door while standing at it exits to world select
+    if (playerOnTile(p, x, y)) return exitThroughDoor(p);
+    return toPlayer(p, 'notify', { text: "The world's main door can't be broken — stand on it and punch to leave." });
+  }
 
   // lock removal — only the owner, its admins, or a developer may break it, and
   // it takes the lock's full hardness (12 hits) like any other block.
@@ -582,12 +586,28 @@ function onPlace(p, msg) {
 function playerOverlapsTile(worldName, tx, ty) {
   for (const p of players.values()) {
     if (p.world !== worldName) continue;
-    const px = Math.floor(p.x / TILE);
-    const pyTop = Math.floor((p.y - PLAYER_H + 2) / TILE);
-    const pyBot = Math.floor((p.y - 2) / TILE);
-    if (px === tx && ty >= pyTop && ty <= pyBot) return true;
+    if (playerOnTile(p, tx, ty)) return true;
   }
   return false;
+}
+
+// does this specific player's body overlap tile (tx, ty)?
+function playerOnTile(p, tx, ty) {
+  const px = Math.floor(p.x / TILE);
+  const pyTop = Math.floor((p.y - PLAYER_H + 2) / TILE);
+  const pyBot = Math.floor((p.y - 2) / TILE);
+  return px === tx && ty >= pyTop && ty <= pyBot;
+}
+
+// leave the world through the main door, back to the world-select screen
+function exitThroughDoor(p) {
+  const wn = p.world;
+  if (!wn) return;
+  broadcast(wn, 'playerLeave', { id: p.id });
+  if (p.trade) cancelTrade(p, 'Trade cancelled.');
+  p.world = null;
+  scheduleSave(wn);
+  toPlayer(p, 'kickedFromWorld', { reason: '🚪 You left through the door.' });
 }
 
 // ---------- shop / buy ----------
