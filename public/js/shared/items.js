@@ -111,23 +111,29 @@ export const ITEMS = {
   // ---- locks ----
   world_lock: {
     id: 'world_lock', name: 'World Lock', type: 'lock', icon: '🔒',
-    color: '#3a7bd5', color2: '#2b5fa6', solid: false, hardness: Infinity,
+    color: '#3a7bd5', color2: '#2b5fa6', solid: true, hardness: Infinity,
     price: 500, lock: { scope: 'world', radius: 0 },
   },
   small_lock: {
     id: 'small_lock', name: 'Small Lock', type: 'lock', icon: '🔑',
-    color: '#d59f3a', color2: '#a67a2b', solid: false, hardness: Infinity,
+    color: '#d59f3a', color2: '#a67a2b', solid: true, hardness: Infinity,
     price: 100, lock: { scope: 'small', radius: 4 },
   },
   huge_lock: {
     id: 'huge_lock', name: 'Huge Lock', type: 'lock', icon: '🗝️',
-    color: '#9b3ad5', color2: '#762ba6', solid: false, hardness: Infinity,
+    color: '#9b3ad5', color2: '#762ba6', solid: true, hardness: Infinity,
     price: 1000, lock: { scope: 'huge', radius: 12 },
   },
 
   // ---- permanent tools (always present, can't be removed/traded) ----
   fist: { id: 'fist', name: 'Fist', type: 'tool', icon: '✊', permanent: true },
   wrench: { id: 'wrench', name: 'Wrench', type: 'tool', icon: '🔧', permanent: true },
+
+  // ---- clothing (equip/unequip from the inventory; never placed in the world) ----
+  adventurer_outfit: {
+    id: 'adventurer_outfit', name: 'Adventurer Outfit', type: 'clothing',
+    icon: '👕', slot: 'body',
+  },
 
   // ---- equippable effect items (grant an effect while in your inventory) ----
   wings: { id: 'wings', name: 'Angel Wings', type: 'effect', icon: '🪽', effect: 'double_jump', price: 800 },
@@ -217,6 +223,16 @@ export function categories() {
 // ---- helpers ----
 // Permanent tools every player always has.
 export const PERMANENT = ['fist', 'wrench'];
+
+// Clothing every player starts owning (so they can dress themselves). They are
+// NOT auto-equipped — players spawn naked and equip from the inventory.
+export const STARTER_CLOTHING = ['adventurer_outfit'];
+
+// Is this an equippable clothing item?
+export function isClothing(id) {
+  const it = ITEMS[id];
+  return !!(it && it.type === 'clothing');
+}
 
 // Is an effect (e.g. 'double_jump', 'long_punch') active for this inventory?
 export function hasEffect(inv, effect) {

@@ -58,6 +58,7 @@
         <span class="chip gems"><span id="gemCount">0</span> 💎</span>
         <button id="shopBtn" class="hud-btn">🛒 Shop</button>
         <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
+        <button id="devBtn" class="hud-btn hidden">⚙️ Dev</button>
         <button id="exitBtn" class="hud-btn">🚪 Exit</button>
       </div>
     </div>
@@ -109,6 +110,7 @@
       </div>
       <div class="tc-right">
         <button class="tc-btn tc-bg" data-bg aria-label="Place into background layer">BG</button>
+        <button class="tc-btn tc-punch" data-punch aria-label="Punch">✊</button>
         <button class="tc-btn tc-jump" data-jump aria-label="Jump">⬆</button>
       </div>
     </div>
@@ -168,6 +170,15 @@
       <div class="prof-section"><h4>🌍 Worlds Owned</h4><ul id="profWorlds" class="prof-list"></ul></div>
       <div class="prof-section"><h4>✨ Effects</h4><ul id="profEffects" class="prof-list"></ul></div>
       <div class="row-right"><button id="profTradeBtn" class="big-btn small hidden">🤝 Request Trade</button></div>
+    </div>
+
+    <!-- Developer tools (developers only) -->
+    <div id="devModal" class="modal hidden">
+      <div class="modal-head"><h3>⚙️ Developer Tools</h3><button class="close-x" data-close>✕</button></div>
+      <p>Grant developer status to a player by name. Developers get a yellow <b>@name</b> and infinite gems.</p>
+      <div class="splice-row"><input id="devNameInput" maxlength="16" placeholder="Player name: letters/numbers only" /><button id="grantDevBtn" class="big-btn small">Grant Dev</button></div>
+      <div class="subhead">Current developers</div>
+      <div id="devList" class="dev-list"></div>
     </div>
 
     <!-- Trade request prompt -->

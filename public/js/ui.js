@@ -1,7 +1,6 @@
 // All DOM-driven UI: HUD, drag-up inventory drawer, searchable shop, trade,
 // admin, player profiles (wrench), chat, toasts, account login.
 import { ITEMS, shopCatalog, categories, PERMANENT, isPlaceable } from './shared/items.js';
-import { isDeveloperName } from './shared/names.js';
 import { iconUrl } from './assets.js';
 import { setTyping } from './input.js';
 
@@ -51,11 +50,12 @@ export class UI {
   showAuthError(text) { const e = $('authError'); e.textContent = text; e.classList.remove('hidden'); }
 
   // ---------- entering a world ----------
-  onEnterWorld(world) {
+  onEnterWorld(world, ownerDev = false) {
     $('worldLabel').textContent = world.name;
     const ownerLabel = $('ownerLabel');
-    ownerLabel.textContent = world.owner ? `Owner: ${world.owner}` : 'Public world';
-    ownerLabel.classList.toggle('dev-name', isDeveloperName(world.owner));
+    const ownerName = ownerDev && world.owner && !world.owner.startsWith('@') ? '@' + world.owner : world.owner;
+    ownerLabel.textContent = world.owner ? `Owner: ${ownerName}` : 'Public world';
+    ownerLabel.classList.toggle('dev-name', !!ownerDev);
     const mine = world.owner && world.owner === this.game.me.name;
     $('adminBtn').classList.toggle('hidden', !mine);
     this.onInventory();
@@ -104,10 +104,19 @@ export class UI {
     ids.sort((a, b) => (ITEMS[b]?.permanent ? 1 : 0) - (ITEMS[a]?.permanent ? 1 : 0));
     for (const id of ids) {
       const it = ITEMS[id]; if (!it) continue;
+      const clothing = it.type === 'clothing';
+      const slot = it.slot || 'body';
+      const worn = clothing && this.game.me.equipped && this.game.me.equipped[slot] === id;
       const card = document.createElement('div');
-      card.className = 'item-card' + (this.game.selected === id ? ' active' : '');
-      card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${it.name}</div><div class="ct">${it.permanent ? 'tool' : 'x' + inv[id]}</div>`;
-      card.onclick = () => { this.game.selected = id; this.buildHotbar(); this.renderInventory(); };
+      card.className = 'item-card' + (this.game.selected === id ? ' active' : '') + (worn ? ' worn' : '');
+      const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'double-tap') : 'x' + inv[id]);
+      card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${it.name}</div><div class="ct">${tag}</div>`;
+      if (clothing) {
+        // double-tap (here in the inventory only) equips / unequips clothing
+        onDoubleTap(card, () => this.net.send('equip', { itemId: id }));
+      } else {
+        card.onclick = () => { this.game.selected = id; this.buildHotbar(); this.renderInventory(); };
+      }
       grid.appendChild(card);
     }
     // splice selects
@@ -152,8 +161,8 @@ export class UI {
   openProfile(id) { this._profileTargetId = id; this.net.send('getProfile', { id }); }
   onProfile(m) {
     const profName = $('profName');
-    profName.textContent = m.name;
-    profName.classList.toggle('dev-name', isDeveloperName(m.name));
+    profName.textContent = m.dev && !String(m.name).startsWith('@') ? '@' + m.name : m.name;
+    profName.classList.toggle('dev-name', !!m.dev);
     $('profOnline').textContent = (m.online ? '🟢 Online' : '⚪ Offline') + ` · 💎 ${formatGems(m.gems)}`;
     const fill = (elId, arr, empty) => {
       const ul = $(elId); ul.innerHTML = '';
@@ -240,41 +249,75 @@ export class UI {
   onTradeDone() { this.trade = null; this.myTradeItems = {}; this.closeModals(); }
 
   // ---------- chat ----------
-  addChat(name, text, sys = false) {
+  addChat(name, text, sys = false, dev = false) {
     const log = $('chatLog');
     const d = document.createElement('div');
     if (sys) d.innerHTML = `<span class="sys">${text}</span>`;
     else {
-      const nameClass = isDeveloperName(name) ? 'cname dev-name' : 'cname';
-      d.innerHTML = `<span class="${nameClass}">${escapeHtml(name)}:</span> ${escapeHtml(text)}`;
+      const label = dev && !String(name).startsWith('@') ? '@' + name : name;
+      const nameClass = dev ? 'cname dev-name' : 'cname';
+      d.innerHTML = `<span class="${nameClass}">${escapeHtml(label)}:</span> ${escapeHtml(text)}`;
     }
     log.appendChild(d); log.scrollTop = log.scrollHeight;
     while (log.children.length > 40) log.removeChild(log.firstChild);
   }
   focusChat() { setTyping(true); $('chatInput').focus(); }
 
-  // ---------- drawer drag ----------
+  // ---------- drawer drag (drag up/down only — tapping does nothing) ----------
   wireDrawer() {
     const drawer = $('invDrawer'), notch = $('drawerNotch');
     let startY = null;
-    notch.addEventListener('pointerdown', (e) => { startY = e.clientY; notch.setPointerCapture(e.pointerId); });
+    notch.addEventListener('pointerdown', (e) => { startY = e.clientY; try { notch.setPointerCapture(e.pointerId); } catch {} });
     notch.addEventListener('pointermove', (e) => {
       if (startY == null) return;
       const dy = startY - e.clientY;
-      if (dy > 28) drawer.classList.add('expanded');
-      else if (dy < -28) drawer.classList.remove('expanded');
+      if (dy > 24) drawer.classList.add('expanded');
+      else if (dy < -24) drawer.classList.remove('expanded');
     });
-    notch.addEventListener('pointerup', (e) => {
-      if (startY != null && Math.abs(startY - e.clientY) < 6) drawer.classList.toggle('expanded');
-      startY = null;
-    });
+    const end = () => { startY = null; };
+    notch.addEventListener('pointerup', end);
+    notch.addEventListener('pointercancel', end);
   }
-  toggleDrawer() { $('invDrawer').classList.toggle('expanded'); }
+  toggleDrawer() { $('invDrawer').classList.toggle('expanded'); }  // keyboard E shortcut (desktop)
+
+  // ---------- developer status / settings ----------
+  onDevStatus() {
+    const isDev = !!this.game.me.dev;
+    const btn = $('devBtn');
+    if (btn) btn.classList.toggle('hidden', !isDev);
+    if (!isDev) this._closeIf('devModal');
+  }
+  _closeIf(id) {
+    if (!$(id).classList.contains('hidden')) this.closeModals();
+  }
+  openDevPanel() {
+    if (!this.game.me.dev) return;
+    this.net.send('getDevelopers');
+    this.openModal('devModal');
+  }
+  onDevList(list) {
+    const box = $('devList'); if (!box) return;
+    box.innerHTML = '';
+    const others = (list || []).filter((n) => n !== '@xtremefire');
+    if (!others.length) { box.innerHTML = '<div class="hint">No granted developers yet.</div>'; return; }
+    for (const name of others) {
+      const row = document.createElement('div'); row.className = 'dev-row';
+      row.innerHTML = `<span>@${escapeHtml(name)}</span>`;
+      const btn = document.createElement('button'); btn.className = 'ghost-btn'; btn.textContent = 'Remove';
+      btn.onclick = () => this.net.send('setDeveloper', { name, grant: false });
+      row.appendChild(btn); box.appendChild(row);
+    }
+  }
 
   // ---------- static buttons ----------
   wireStaticButtons() {
     $('shopBtn').onclick = () => { this.renderShop(); this.openModal('shopModal'); };
     $('adminBtn').onclick = () => { this.renderAdmin(); this.openModal('adminModal'); };
+    $('devBtn').onclick = () => this.openDevPanel();
+    $('grantDevBtn').onclick = () => {
+      const name = $('devNameInput').value.trim();
+      if (name) { this.net.send('setDeveloper', { name, grant: true }); $('devNameInput').value = ''; }
+    };
     $('exitBtn').onclick = () => { this.game.stop(); this.net.send('leaveWorld'); document.dispatchEvent(new Event('backToWorlds')); };
 
     for (const x of document.querySelectorAll('[data-close]')) x.onclick = () => this.closeModals();
@@ -314,3 +357,13 @@ function formatGems(gems) {
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// Fire `fn` on a double click / double tap of `el` (works for mouse and touch).
+function onDoubleTap(el, fn) {
+  let last = 0;
+  el.addEventListener('click', (e) => {
+    const now = Date.now();
+    if (now - last < 320) { last = 0; e.preventDefault(); fn(); }
+    else last = now;
+  });
+}

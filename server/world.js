@@ -118,7 +118,8 @@ export class World {
     if (this.fg[i]) return false; // need empty space (foreground)
 
     if (def.lock.scope === 'world') {
-      if (this.owner && this.owner !== playerName) return false;
+      // only ONE world lock per world — if it already has an owner, refuse
+      if (this.owner) return false;
       this.owner = playerName;
       this.fg[i] = lockId;
       this.data[i] = { lock: { scope: 'world', owner: playerName, admins: this.admins } };

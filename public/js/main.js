@@ -29,15 +29,18 @@ function sendAuth(type, payload) {
 // ---------- network events ----------
 net.on('welcome', (m) => {
   game.me.id = m.id; game.me.name = m.name; game.me.gems = m.gems; game.me.inventory = m.inventory;
+  game.me.dev = !!m.dev; game.me.equipped = m.equipped || {};
   ui.onInventory();
+  ui.onDevStatus();
   showScreen('worldSelect');
   net.send('getWorlds');
 });
 net.on('authError', (m) => ui.showAuthError(m.text));
 net.on('worldList', (m) => renderWorldList(m.worlds));
 net.on('notify', (m) => ui.toast(m.text));
-net.on('chat', (m) => ui.addChat(m.name, m.text));
+net.on('chat', (m) => ui.addChat(m.name, m.text, false, m.dev));
 net.on('profile', (m) => ui.onProfile(m));
+net.on('devList', (m) => ui.onDevList(m.developers || []));
 net.on('tradeRequest', (m) => ui.onTradeRequest(m.fromId, m.fromName));
 net.on('tradeWindow', (m) => ui.onTradeWindow(m));
 net.on('tradeDone', () => ui.onTradeDone());
