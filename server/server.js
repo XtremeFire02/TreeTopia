@@ -196,6 +196,7 @@ function handle(p, msg) {
     case 'respawn':     return onRespawn(p);
     case 'chat':        return onChat(p, msg);
     case 'command':     return onCommand(p, msg);
+    case 'deleteWorld': return onDeleteWorld(p, msg);
     case 'tradeRequest': return onTradeRequest(p, msg);
     case 'tradeAccept':  return onTradeAccept(p, msg);
     case 'tradeOffer':   return onTradeOffer(p, msg);
@@ -864,17 +865,39 @@ function cmdGameUnban(p, name) {
   saveGameBans();
   toPlayer(p, 'notify', { text: `Game-unbanned ${name}.` });
 }
-function cmdDeleteWorld(p) {
-  const wn = p.world; if (!wn) return;
-  const w = worlds.get(wn);
+// /deleteworld [NAME] — with no name, deletes the world you're in
+function cmdDeleteWorld(p, arg) {
+  const name = (arg ? arg : p.world || '').toUpperCase();
+  if (!name) return;
+  deleteWorldByName(name);
+  toPlayer(p, 'notify', { text: `Deleted world ${name}.` });
+  if (!p.world) onGetWorlds(p);   // refresh the list if deleted from world-select
+}
+
+// delete a world: bounce everyone out, drop its owner claim, wipe file + memory
+function deleteWorldByName(rawName) {
+  const name = String(rawName || '').trim().replace(/[^A-Za-z0-9_]/g, '').slice(0, 18).toUpperCase();
+  if (!name) return false;
+  const w = worlds.get(name);
   for (const pl of [...players.values()]) {
-    if (pl.world === wn) forceLeaveWorld(pl, `World ${wn} was deleted by a developer.`);
+    if (pl.world === name) forceLeaveWorld(pl, `World ${name} was deleted by a developer.`);
   }
-  if (w) { if (w.owner) removeOwnedWorld(w.owner, wn); }
-  worlds.delete(wn);
-  dirtyWorlds.delete(wn);
-  try { fs.unlinkSync(path.join(WORLDS_DIR, wn + '.json')); } catch { /* never saved */ }
-  toPlayer(p, 'notify', { text: `Deleted world ${wn}.` });
+  const ownerName = w ? w.owner : peekOwner(name);
+  if (ownerName) removeOwnedWorld(ownerName, name);
+  worlds.delete(name);
+  dirtyWorlds.delete(name);
+  try { fs.unlinkSync(path.join(WORLDS_DIR, name + '.json')); } catch { /* never saved */ }
+  return true;
+}
+
+// delete any world by name (e.g. from the world-select screen) — developers only
+function onDeleteWorld(p, msg) {
+  if (!isDeveloper(p)) return toPlayer(p, 'notify', { text: 'Only developers can delete worlds.' });
+  const name = String(msg.name || '').trim().replace(/[^A-Za-z0-9_]/g, '').slice(0, 18).toUpperCase();
+  if (!name) return;
+  deleteWorldByName(name);
+  toPlayer(p, 'notify', { text: `Deleted world ${name}.` });
+  onGetWorlds(p);
 }
 
 // ---------- trading ----------

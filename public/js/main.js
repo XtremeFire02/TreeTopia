@@ -84,6 +84,17 @@ function renderWorldList(worlds) {
     card.innerHTML = `<div class="wname">${w.name}</div>
       <div class="wmeta"><span class="dot">●</span> ${w.players} online ${w.owner ? '· 🔒 ' + w.owner : '· public'}</div>`;
     card.onclick = () => enterWorld(w.name);
+    if (game.me.dev) {                          // developers can delete any world
+      const del = document.createElement('button');
+      del.className = 'world-del'; del.textContent = '🗑️'; del.title = 'Delete world (developer)';
+      del.onclick = (e) => {
+        e.stopPropagation();
+        if (window.confirm(`Delete world ${w.name}? It will be wiped and everyone inside sent out.`)) {
+          net.send('deleteWorld', { name: w.name });
+        }
+      };
+      card.appendChild(del);
+    }
     list.appendChild(card);
   }
 }
