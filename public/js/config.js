@@ -15,4 +15,4 @@
 //
 // For quick testing you can also override at runtime with ?server=wss://host in
 // the page URL, which beats everything below.
-export const SERVER_URL = '';
+export const SERVER_URL = 'ws://13.237.239.15';
