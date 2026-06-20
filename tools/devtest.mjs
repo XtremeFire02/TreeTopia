@@ -1,6 +1,11 @@
 import WebSocket from 'ws';
 const URL = 'ws://localhost:3000';
 const ok = (c, m) => console.log((c ? 'PASS' : 'FAIL') + ' ' + m);
+// wait for an 'inventory' message satisfying pred, skipping stale ones in flight
+async function waitInv(c, pred, tries = 8) {
+  for (let i = 0; i < tries; i++) { const m = await c.wait('inventory'); if (pred(m)) return m; }
+  return null;
+}
 
 function client() {
   return new Promise((resolve) => {
@@ -96,10 +101,26 @@ try {
   D.send('place', { x: sx + 2, y: sy - 1, itemId: 'world_lock' });
   const r = await D.wait('notify');
   ok(/already has a World Lock/i.test(r.text || ''), 'second world lock refused: "' + r.text + '"');
-  // a developer can break/remove a lock (here, their own world lock)
+  // locks now take 12 hits to break — one hit should NOT remove it
   D.send('break', { x: sx - 2, y: sy - 1 });
+  const bp = await D.wait('breakProgress');
+  ok(bp.hits === 1 && bp.hardness === 12, 'lock break is gradual (1/12 after one hit)');
+  for (let k = 0; k < 11; k++) D.send('break', { x: sx - 2, y: sy - 1 });
   const t2 = await D.wait('tileUpdate');
-  ok(t2.fg === '' && t2.x === sx - 2, 'developer removes the world lock');
+  ok(t2.fg === '' && t2.x === sx - 2, 'lock removed after 12 hits');
+
+  // item packs grant a bundle
+  D.flush('notify'); D.flush('inventory');
+  D.send('buyPack', { packId: 'pack_seeds' });
+  const pinv = await waitInv(D, (m) => m.inventory.grass_seed >= 2);
+  ok(pinv && pinv.inventory.dirt_seed >= 2, 'buying a pack grants the bundle');
+
+  // Angel Wings are equippable in the wings slot
+  D.send('buy', { itemId: 'wings', qty: 1 });
+  await waitInv(D, (m) => m.inventory.wings >= 1);
+  D.send('equip', { itemId: 'wings' });
+  const winv = await waitInv(D, (m) => m.equipped && m.equipped.wings === 'wings');
+  ok(!!winv, 'Angel Wings equip into the wings slot');
 
   clearTimeout(fail);
   process.exit(0);

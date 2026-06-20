@@ -52,11 +52,15 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
-      - name: Allow cleartext traffic (debug sideload build)
+      - name: Allow cleartext + lock to landscape
         run: |
           manifest=android/app/src/main/AndroidManifest.xml
           if ! grep -q 'usesCleartextTraffic' "$manifest"; then
             sed -i 's/<application /<application android:usesCleartextTraffic="true" /' "$manifest"
+          fi
+          # lock the main activity to landscape (sensor-driven, either way up)
+          if ! grep -q 'screenOrientation' "$manifest"; then
+            sed -i 's#android:name="\.MainActivity"#android:name=".MainActivity"\n            android:screenOrientation="sensorLandscape"#' "$manifest"
           fi
 
       - name: Build the debug APK

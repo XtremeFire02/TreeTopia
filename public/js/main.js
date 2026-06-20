@@ -33,13 +33,16 @@ net.on('welcome', (m) => {
   // a freshly-minted guest gets a token to log back into the same account later
   if (m.guestToken) {
     try { localStorage.setItem('tt_guestName', m.name); localStorage.setItem('tt_guestToken', m.guestToken); } catch { /* ignore */ }
+  } else if (pendingCreds) {
+    saveCreds(pendingCreds);   // remember a real login/register so it auto-fills next time
   }
+  pendingCreds = null;
   ui.onInventory();
   ui.onDevStatus();
   showScreen('worldSelect');
   net.send('getWorlds');
 });
-net.on('authError', (m) => ui.showAuthError(m.text));
+net.on('authError', (m) => { pendingCreds = null; ui.showAuthError(m.text); });
 net.on('worldList', (m) => renderWorldList(m.worlds));
 net.on('notify', (m) => ui.toast(m.text));
 net.on('chat', (m) => ui.addChat(m.name, m.text, false, m.dev));
@@ -79,14 +82,22 @@ function enterWorld(name) {
 $('enterWorldBtn').onclick = () => enterWorld($('worldNameInput').value);
 $('worldNameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') enterWorld($('worldNameInput').value); });
 $('refreshWorldsBtn').onclick = () => net.send('getWorlds');
-$('logoutBtn').onclick = () => location.reload();
+// log out: keep the saved credentials but don't auto-login on the next load,
+// so you land back on a PRE-FILLED login screen (one tap, no retyping)
+$('logoutBtn').onclick = () => {
+  try { sessionStorage.setItem('tt_skipAuto', '1'); } catch { /* ignore */ }
+  location.reload();
+};
 
-// ---------- login / accounts ----------
+// ---------- login / accounts (with remember-me) ----------
 function creds() {
   return { name: $('nameInput').value.trim(), password: $('passInput').value };
 }
-$('loginBtn').onclick = () => { const c = creds(); if (c.name) sendAuth('login', c); };
-$('registerBtn').onclick = () => { const c = creds(); if (c.name) sendAuth('register', c); };
+function saveCreds(c) { try { localStorage.setItem('tt_user', c.name); localStorage.setItem('tt_pass', c.password); } catch { /* ignore */ } }
+function loadCreds() { try { return { name: localStorage.getItem('tt_user') || '', password: localStorage.getItem('tt_pass') || '' }; } catch { return { name: '', password: '' }; } }
+let pendingCreds = null;   // creds awaiting a 'welcome' to confirm + save
+$('loginBtn').onclick = () => { const c = creds(); if (c.name) { pendingCreds = c; sendAuth('login', c); } };
+$('registerBtn').onclick = () => { const c = creds(); if (c.name) { pendingCreds = c; sendAuth('register', c); } };
 $('guestBtn').onclick = () => {
   // reuse this device's saved guest account if it has one, else mint a new one
   let guestCreds = {};
@@ -124,7 +135,18 @@ initTouch(game);
     await net.connect();
     setAuthButtons(true);
     $('authError').classList.add('hidden');
-    $('nameInput').focus();
+    // remember-me: pre-fill saved credentials, and auto-login unless we just
+    // logged out (in which case land on the pre-filled login screen)
+    const saved = loadCreds();
+    if (saved.name) { $('nameInput').value = saved.name; $('passInput').value = saved.password; }
+    let skipAuto = false;
+    try { skipAuto = sessionStorage.getItem('tt_skipAuto') === '1'; sessionStorage.removeItem('tt_skipAuto'); } catch { /* ignore */ }
+    if (saved.name && saved.password && !skipAuto) {
+      pendingCreds = saved;
+      sendAuth('login', saved);
+    } else {
+      $('nameInput').focus();
+    }
   } catch {
     setAuthButtons(false);
     ui.showAuthError('Could not connect to the game server. Reload this page or ask for a fresh link.');

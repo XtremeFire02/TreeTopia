@@ -3,7 +3,7 @@ import {
   TILE, GRAVITY, MOVE_SPEED, JUMP_VELOCITY, MAX_FALL,
   PLAYER_W, PLAYER_H, REACH, RESPAWN_MS, BREAK_RESET_MS,
 } from './shared/constants.js';
-import { ITEMS, isSolid, hasEffect, isPlaceable } from './shared/items.js';
+import { ITEMS, isSolid, hasEffect, hasEquippedEffect, isPlaceable } from './shared/items.js';
 import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE } from './shared/names.js';
 import { keys, mouse } from './input.js';
 import { tileSprite, dropSprite } from './assets.js';
@@ -144,7 +144,7 @@ export class Game {
 
     // jump (edge-triggered; second jump in mid-air with Angel Wings)
     const jumpKey = keys['arrowup'] || keys['w'] || keys[' '];
-    const maxJumps = hasEffect(this.me.inventory, 'double_jump') ? 2 : 1;
+    const maxJumps = hasEquippedEffect(this.me.equipped, 'double_jump') ? 2 : 1;
     if (L.onGround) L.jumpsUsed = 0;
     if (jumpKey && !this._jumpHeld && L.jumpsUsed < maxJumps) {
       L.vy = -JUMP_VELOCITY; L.onGround = false; L.jumpsUsed++;

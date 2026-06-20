@@ -111,17 +111,17 @@ export const ITEMS = {
   // ---- locks ----
   world_lock: {
     id: 'world_lock', name: 'World Lock', type: 'lock', icon: '🔒',
-    color: '#3a7bd5', color2: '#2b5fa6', solid: true, hardness: Infinity,
+    color: '#3a7bd5', color2: '#2b5fa6', solid: true, hardness: 12,
     price: 500, lock: { scope: 'world', radius: 0 },
   },
   small_lock: {
     id: 'small_lock', name: 'Small Lock', type: 'lock', icon: '🔑',
-    color: '#d59f3a', color2: '#a67a2b', solid: true, hardness: Infinity,
+    color: '#d59f3a', color2: '#a67a2b', solid: true, hardness: 12,
     price: 100, lock: { scope: 'small', radius: 4 },
   },
   huge_lock: {
     id: 'huge_lock', name: 'Huge Lock', type: 'lock', icon: '🗝️',
-    color: '#9b3ad5', color2: '#762ba6', solid: true, hardness: Infinity,
+    color: '#9b3ad5', color2: '#762ba6', solid: true, hardness: 12,
     price: 1000, lock: { scope: 'huge', radius: 12 },
   },
 
@@ -259,11 +259,38 @@ export function isClothing(id) {
   return !!(it && it.type === 'clothing');
 }
 
-// Is an effect (e.g. 'double_jump', 'long_punch') active for this inventory?
+// Is an effect (e.g. 'long_punch') active just from OWNING an item?
 export function hasEffect(inv, effect) {
   for (const id in inv) if (inv[id] > 0 && ITEMS[id] && ITEMS[id].effect === effect) return true;
   return false;
 }
+
+// Is an effect active because a matching item is EQUIPPED (e.g. double_jump only
+// while Angel Wings are worn)?
+export function hasEquippedEffect(equipped, effect) {
+  if (!equipped) return false;
+  for (const slot in equipped) {
+    const it = ITEMS[equipped[slot]];
+    if (it && it.effect === effect) return true;
+  }
+  return false;
+}
+
+// ---- shop item packs ----
+// Similar items are grouped into a named pack; buying it grants the bundle.
+// Rare items (see SHOP_INDIVIDUAL) are still sold one at a time.
+export const PACKS = [
+  { id: 'pack_dirt', name: 'Dirt Starter Pack', price: 60, items: { dirt: 30, dirt_seed: 3 } },
+  { id: 'pack_blocks', name: 'Builder Block Pack', price: 220, items: { dirt: 20, grass: 15, sand: 15, wood: 15, rock: 10 } },
+  { id: 'pack_seeds', name: 'Seed Starter Pack', price: 240, items: { dirt_seed: 2, grass_seed: 2, sand_seed: 2, rock_seed: 2, wood_seed: 2, leaves_seed: 1 } },
+  { id: 'pack_rare_seeds', name: 'Rare Seed Pack', price: 900, items: { brick_seed: 1, glass_seed: 1, lava_seed: 1 } },
+  { id: 'pack_locks', name: 'Lock Pack', price: 1000, items: { small_lock: 1, huge_lock: 1 } },
+  { id: 'pack_decor', name: 'Decor Pack', price: 100, items: { sign: 5 } },
+];
+export const PACK_BY_ID = Object.fromEntries(PACKS.map((p) => [p.id, p]));
+
+// Rare items that stay individually purchasable (not bundled into packs).
+export const SHOP_INDIVIDUAL = ['world_lock', 'gold_seed', 'wings', 'cyclopean_visor', 'crimson_eagle_wings'];
 
 // Items that can actually be placed in the world.
 export function isPlaceable(id) {

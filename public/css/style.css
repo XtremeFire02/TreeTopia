@@ -25,9 +25,10 @@ html, body {
 .panel {
   background: var(--panel); padding: 34px 40px; border-radius: 18px;
   box-shadow: 0 20px 60px rgba(0,0,0,.5); text-align: center;
-  width: 420px; max-width: 92vw; border: 1px solid rgba(255,255,255,.06);
+  width: 420px; max-width: 92vw; max-height: 94vh; overflow-y: auto;
+  border: 1px solid rgba(255,255,255,.06);
 }
-.panel.wide { width: 600px; text-align: left; }
+.panel.wide { width: min(900px, 94vw); text-align: left; }
 .logo { font-size: 34px; letter-spacing: 2px; margin-bottom: 6px; }
 .logo span { color: var(--accent); }
 .tagline { color: var(--muted); margin-bottom: 22px; }
@@ -60,7 +61,7 @@ input:focus, select:focus { border-color: var(--accent2); }
 .world-create input { margin: 0; }
 .world-create .big-btn { width: 90px; }
 .subhead { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 10px 0 8px; }
-.world-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 320px; overflow-y: auto; }
+.world-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: 46vh; overflow-y: auto; }
 .world-card {
   background: var(--panel2); border-radius: 12px; padding: 14px; cursor: pointer;
   border: 1px solid rgba(255,255,255,.06); transition: transform .08s, background .15s;
@@ -228,9 +229,15 @@ body.touch #chatInput { opacity: .9; }
 /* shop toolbar */
 .shop-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .shop-toolbar input { margin: 0; flex: 1; min-width: 140px; }
-.shop-toolbar select { margin: 0; width: auto; max-width: 220px; }
+.shop-toolbar #shopCategory { display: none; }   /* replaced by item packs */
 .shop-toolbar .shop-gems { color: var(--gold); white-space: nowrap; font-weight: 600; }
 .item-card .cat { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* shop sections + pack cards */
+.shop-section { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 2px; }
+.pack-card { background: linear-gradient(180deg, #34507a, #28406a); border-color: rgba(120,170,255,.3); }
+.pack-card .ic { font-size: 28px; }
+.pack-card .cat { color: #cde0ff; }
 
 /* profile modal */
 .prof-section { margin-top: 14px; }
@@ -270,6 +277,17 @@ body.touch #chatInput { opacity: .9; }
 .tc-punch:active { background: rgba(210,90,60,.9); }
 .tc-bg { width: 46px; height: 46px; font-size: 12px; border-radius: 13px; align-self: flex-start; }
 .tc-bg.on { background: rgba(242,197,49,.9); color: #1b2330; border-color: var(--gold); }
+
+/* "rotate to landscape" notice (web/touch in portrait; native app is locked) */
+#rotateNotice { display: none; }
+@media (orientation: portrait) {
+  body.touch #rotateNotice {
+    display: flex; position: fixed; inset: 0; z-index: 2000;
+    background: radial-gradient(circle at 50% 40%, #243044, #141b25);
+    color: var(--text); align-items: center; justify-content: center;
+    text-align: center; padding: 30px; font-size: 19px; font-weight: 600;
+  }
+}
 
 /* tweaks applied only when the device is touch-driven */
 body.touch #controls { display: none; }                 /* keyboard help is irrelevant */

@@ -14,7 +14,7 @@ import {
 } from '../public/js/shared/constants.js';
 import {
   ITEMS, spliceResult, rollDrops, rollHarvest, isSolid,
-  PERMANENT, STARTER_CLOTHING, hasEffect, isPlaceable, isClothing,
+  PERMANENT, STARTER_CLOTHING, hasEffect, isPlaceable, isClothing, PACK_BY_ID,
 } from '../public/js/shared/items.js';
 
 const ACHIEVEMENTS = {
@@ -179,6 +179,7 @@ function handle(p, msg) {
     case 'break':       return onBreak(p, msg);
     case 'place':       return onPlace(p, msg);
     case 'buy':         return onBuy(p, msg);
+    case 'buyPack':     return onBuyPack(p, msg);
     case 'splice':      return onSplice(p, msg);
     case 'equip':       return onEquip(p, msg);
     case 'setDeveloper': return onSetDeveloper(p, msg);
@@ -439,9 +440,8 @@ function onBreak(p, msg) {
   if (!def) return;
   if (w.data[i] && w.data[i].main) { return toPlayer(p, 'notify', { text: "The world's main door can't be broken." }); }
 
-  // lock removal — the lock owner, its admins, or any developer may remove it.
-  // (Checked before the unbreakable-hardness guard below, since locks are
-  // intentionally "unbreakable" to everyone except those parties.)
+  // lock removal — only the owner, its admins, or a developer may break it, and
+  // it takes the lock's full hardness (12 hits) like any other block.
   if (def.type === 'lock') {
     const d = w.data[i];
     const lockOwner = d && d.lock ? d.lock.owner : null;
@@ -449,16 +449,23 @@ function onBreak(p, msg) {
     if (!allowed) {
       return toPlayer(p, 'notify', { text: 'Only the lock owner (or a developer) can remove it.' });
     }
-    if (d.lock.scope === 'world') {
-      w.owner = null; w.admins = [];
-      removeOwnedWorld(lockOwner, w.name);
+    const tNow = Date.now();
+    let lb = w.breaking[i];
+    if (!lb || tNow - lb.last > BREAK_RESET_MS) lb = { hits: 0, last: tNow };
+    lb.hits++; lb.last = tNow; w.breaking[i] = lb;
+    broadcast(p.world, 'breakProgress', { x, y, hits: lb.hits, hardness: def.hardness });
+    if (lb.hits >= def.hardness) {
+      if (d.lock.scope === 'world') {
+        w.owner = null; w.admins = [];
+        removeOwnedWorld(lockOwner, w.name);
+      }
+      grant(p, fg, 1);
+      w.clearTile(x, y);
+      delete w.data[i];                  // free the locked area (clearTile keeps lock data)
+      broadcast(p.world, 'tileUpdate', { x, y, fg: '', data: null });
+      sendInventory(p);
+      scheduleSave(p.world);
     }
-    grant(p, fg, 1);
-    w.clearTile(x, y);
-    delete w.data[i];                    // free the locked area (clearTile keeps lock data)
-    broadcast(p.world, 'tileUpdate', { x, y, fg: '', data: null });
-    sendInventory(p);
-    scheduleSave(p.world);
     return;
   }
 
@@ -576,6 +583,17 @@ function onBuy(p, msg) {
   grant(p, it.id, qty);
   sendInventory(p);
   toPlayer(p, 'notify', { text: `Bought ${qty}x ${it.name}.` });
+  saveProfile(p);
+}
+
+function onBuyPack(p, msg) {
+  const pack = PACK_BY_ID[msg.packId];
+  if (!pack) return;
+  if (!canAffordGems(p, pack.price)) return toPlayer(p, 'notify', { text: 'Not enough gems.' });
+  spendGems(p, pack.price);
+  for (const [id, n] of Object.entries(pack.items)) if (ITEMS[id]) grant(p, id, n);
+  sendInventory(p);
+  toPlayer(p, 'notify', { text: `Bought the ${pack.name}!` });
   saveProfile(p);
 }
 

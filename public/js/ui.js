@@ -1,6 +1,6 @@
 // All DOM-driven UI: HUD, drag-up inventory drawer, searchable shop, trade,
 // admin, player profiles (wrench), chat, toasts, account login.
-import { ITEMS, shopCatalog, categories, PERMANENT, isPlaceable } from './shared/items.js';
+import { ITEMS, shopCatalog, PACKS, SHOP_INDIVIDUAL, PERMANENT, isPlaceable } from './shared/items.js';
 import { iconUrl } from './assets.js';
 import { setTyping } from './input.js';
 
@@ -125,30 +125,58 @@ export class UI {
     fill($('spliceA')); fill($('spliceB'));
   }
 
-  // ---------- shop (searchable / categorized) ----------
-  ensureShopCategories() {
-    const sel = $('shopCategory');
-    if (sel.dataset.ready) return;
-    sel.innerHTML = '<option value="All">All categories</option>';
-    for (const c of categories()) { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); }
-    sel.dataset.ready = '1';
+  // ---------- shop (item packs + rare individuals) ----------
+  _shopHeader(text) {
+    const h = document.createElement('div'); h.className = 'shop-section'; h.textContent = text; return h;
   }
   renderShop() {
-    this.ensureShopCategories();
     $('shopGems').textContent = formatGems(this.game.me.gems);
     const q = ($('shopSearch').value || '').toLowerCase().trim();
-    const cat = $('shopCategory').value || 'All';
-    let list = shopCatalog().filter((s) => (cat === 'All' || s.category === cat) && (!q || s.name.toLowerCase().includes(q)));
-    const total = list.length;
-    list = list.slice(0, 150);
+    const matches = (name) => !q || String(name).toLowerCase().includes(q);
     const grid = $('shopGrid'); grid.innerHTML = '';
-    for (const s of list) {
-      const card = document.createElement('div'); card.className = 'item-card';
-      card.innerHTML = `<div class="ic">${this.icon(s.id)}</div><div class="nm">${s.name}</div><div class="pr">${s.price} 💎</div><div class="cat">${s.category}</div>`;
-      card.onclick = () => this.net.send('buy', { itemId: s.id, qty: 1 });
-      grid.appendChild(card);
+
+    // item packs (bundles of similar items)
+    const packs = PACKS.filter((p) => matches(p.name));
+    if (packs.length) {
+      grid.appendChild(this._shopHeader('📦 Item Packs'));
+      for (const pack of packs) {
+        const contents = Object.entries(pack.items).map(([id, n]) => `${n}× ${ITEMS[id]?.name || id}`).join(', ');
+        const card = document.createElement('div'); card.className = 'item-card pack-card';
+        card.title = contents;
+        card.innerHTML = `<div class="ic">📦</div><div class="nm">${pack.name}</div><div class="pr">${pack.price} 💎</div><div class="cat">${contents}</div>`;
+        card.onclick = () => this.net.send('buyPack', { packId: pack.id });
+        grid.appendChild(card);
+      }
     }
-    $('shopNote').textContent = total > list.length ? `Showing ${list.length} of ${total} — refine your search.` : `${total} item(s).`;
+
+    // rare items, still sold individually
+    const rares = SHOP_INDIVIDUAL.map((id) => ITEMS[id]).filter((it) => it && it.price != null && matches(it.name));
+    if (rares.length) {
+      grid.appendChild(this._shopHeader('✨ Rare Items'));
+      for (const it of rares) {
+        const card = document.createElement('div'); card.className = 'item-card';
+        card.innerHTML = `<div class="ic">${this.icon(it.id)}</div><div class="nm">${it.name}</div><div class="pr">${it.price} 💎</div>`;
+        card.onclick = () => this.net.send('buy', { itemId: it.id, qty: 1 });
+        grid.appendChild(card);
+      }
+    }
+
+    // when searching, also surface matching items from the wider catalog
+    if (q) {
+      const shown = new Set(SHOP_INDIVIDUAL);
+      const extra = shopCatalog().filter((s) => !shown.has(s.id) && matches(s.name)).slice(0, 60);
+      if (extra.length) {
+        grid.appendChild(this._shopHeader('🔎 More Items'));
+        for (const s of extra) {
+          const card = document.createElement('div'); card.className = 'item-card';
+          card.innerHTML = `<div class="ic">${this.icon(s.id)}</div><div class="nm">${s.name}</div><div class="pr">${s.price} 💎</div>`;
+          card.onclick = () => this.net.send('buy', { itemId: s.id, qty: 1 });
+          grid.appendChild(card);
+        }
+      }
+    }
+
+    $('shopNote').textContent = q ? 'Showing matches for your search.' : 'Buy a pack for a bundle of items, or grab a rare item. Search to find more.';
   }
 
   // ---------- admin ----------
