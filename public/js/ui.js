@@ -204,7 +204,24 @@ export class UI {
     const btn = $('profTradeBtn');
     btn.classList.toggle('hidden', !canTrade);
     btn.onclick = () => { this.net.send('tradeRequest', { targetId: this._profileTargetId }); this.closeModals(); };
+
+    // moderation actions (server still enforces permissions)
+    this._profileTargetName = m.name;
+    const me = this.game.me;
+    const isSelf = m.name === me.name;
+    const amOwner = !!(this.game.world && this.game.world.owner && this.game.world.owner === me.name);
+    const amDev = !!me.dev;
+    const canModerate = !!m.online && !isSelf && !m.dev;   // developers can't be targeted
+    $('profOwnerActions').classList.toggle('hidden', !((amOwner || amDev) && canModerate));
+    $('profDevActions').classList.toggle('hidden', !(amDev && canModerate));
+
     this.openModal('profileModal');
+  }
+  sendModAction(cmd) {
+    const name = this._profileTargetName;
+    if (!name) return;
+    this.net.send('command', { cmd, arg: name });
+    this.closeModals();
   }
 
   // ---------- player tag overlay (wrench buttons over players) ----------
@@ -353,6 +370,8 @@ export class UI {
       if (name) { this.net.send('setDeveloper', { name, grant: true }); $('devNameInput').value = ''; }
     };
     $('exitBtn').onclick = () => { this.game.stop(); this.net.send('leaveWorld'); document.dispatchEvent(new Event('backToWorlds')); };
+
+    for (const x of document.querySelectorAll('[data-act]')) x.onclick = () => this.sendModAction(x.dataset.act);
 
     for (const x of document.querySelectorAll('[data-close]')) x.onclick = () => this.closeModals();
     for (const x of document.querySelectorAll('[data-close-trade]')) x.onclick = () => { this.net.send('tradeCancel'); this.closeModals(); };

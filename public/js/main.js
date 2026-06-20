@@ -48,6 +48,19 @@ net.on('notify', (m) => ui.toast(m.text));
 net.on('chat', (m) => ui.addChat(m.name, m.text, false, m.dev));
 net.on('profile', (m) => ui.onProfile(m));
 net.on('devList', (m) => ui.onDevList(m.developers || []));
+net.on('kickedFromWorld', (m) => {
+  game.stop();
+  ui.closeModals();
+  ui.toast(m.reason || 'You left the world.');
+  showScreen('worldSelect');
+  net.send('getWorlds');
+});
+net.on('gameBanned', (m) => {
+  game.stop();
+  ui.closeModals();
+  showScreen('login');
+  ui.showAuthError(m.reason || 'You have been banned from TreeTopia.');
+});
 net.on('tradeRequest', (m) => ui.onTradeRequest(m.fromId, m.fromName));
 net.on('tradeWindow', (m) => ui.onTradeWindow(m));
 net.on('tradeDone', () => ui.onTradeDone());

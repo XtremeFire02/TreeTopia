@@ -98,6 +98,9 @@ export class Game {
     if (m.fg !== undefined) w.fg[i] = m.fg;
     if (m.bg !== undefined) w.bg[i] = m.bg;
     if (m.data !== undefined) { if (m.data === null) delete w.data[i]; else w.data[i] = m.data; }
+    // keep the local world owner in sync when a World Lock is placed/removed
+    if (m.data && m.data.lock && m.data.lock.scope === 'world') w.owner = m.data.lock.owner;
+    else if (m.fg === '' && w.fg[i] === '' && m.data === null) { /* a tile cleared; owner re-derived on next enter */ }
     this.breakFx.delete(m.x + ',' + m.y);
     if (m.fg === '') this.spawnPoof(m.x * TILE + TILE / 2, m.y * TILE + TILE / 2);
   }
@@ -615,17 +618,18 @@ function drawAvatar(ctx, H, eq, swing, anim) {
   }
   if (eq.pet) drawPet(ctx, col('pet', '#7bc24a'));
 
-  // far-side limbs (slightly darker for depth), behind the torso
+  // far-side limbs (slightly darker for depth), behind the torso. The back arm
+  // sits on the +x (front-facing) side, the front arm on −x — see near limbs.
   drawLimb(ctx, -3, hipY, legLen, legW, -swing, shade(legColor, -0.14), shoeColor);
-  drawLimb(ctx, -5, shoulderY + 1, armLen, armW, swing, shade(SKIN, -0.14), null);
+  drawLimb(ctx, 5, shoulderY + 1, armLen, armW, swing, shade(SKIN, -0.14), null);
 
   // torso
   ctx.fillStyle = torsoColor;
   roundRect(ctx, -torsoW / 2, torsoTop, torsoW, torsoH, 4); ctx.fill();
 
-  // near-side limbs
+  // near-side limbs (front arm drawn over the torso, on the −x side)
   drawLimb(ctx, 3, hipY, legLen, legW, swing, legColor, shoeColor);
-  if (anim !== 'punch') drawLimb(ctx, 5, shoulderY + 1, armLen, armW, -swing, SKIN, null);
+  if (anim !== 'punch') drawLimb(ctx, -5, shoulderY + 1, armLen, armW, -swing, SKIN, null);
 
   if (eq.scarf) { ctx.fillStyle = col('scarf', '#d24a4a'); roundRect(ctx, -torsoW / 2 - 1, torsoTop - 2, torsoW + 2, 4, 2); ctx.fill(); }
 

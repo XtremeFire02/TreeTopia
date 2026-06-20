@@ -14,6 +14,7 @@ export class World {
     this.data = {};            // tileIndex -> extra state (door / tree / lock)
     this.owner = null;         // world-lock owner (player name) or null = public
     this.admins = [];          // world-lock admins
+    this.bans = {};            // lowercased name -> ban expiry ms (or true = permanent)
     this.spawn = { tx: 0, ty: 0 };
     this.breaking = {};         // tileIndex -> { hits, last } (in-memory only)
     this.generate();
@@ -156,7 +157,7 @@ export class World {
     return {
       name: this.name, width: this.width, height: this.height,
       fg: this.fg, bg: this.bg, data: this.data,
-      owner: this.owner, admins: this.admins, spawn: this.spawn,
+      owner: this.owner, admins: this.admins, bans: this.bans, spawn: this.spawn,
     };
   }
 
@@ -165,6 +166,7 @@ export class World {
     w.name = obj.name; w.width = obj.width; w.height = obj.height;
     w.fg = obj.fg; w.bg = obj.bg; w.data = obj.data || {};
     w.owner = obj.owner || null; w.admins = obj.admins || [];
+    w.bans = obj.bans || {};
     w.spawn = obj.spawn; w.breaking = {};
     return w;
   }

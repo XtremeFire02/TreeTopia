@@ -122,6 +122,27 @@ try {
   const winv = await waitInv(D, (m) => m.equipped && m.equipped.wings === 'wings');
   ok(!!winv, 'Angel Wings equip into the wings slot');
 
+  // --- moderation commands (D is a developer, in SOLOWORLD) ---
+  const V = await client();
+  V.send('register', { name: 'Victim', password: 'vpass' });
+  await V.wait('welcome');
+  V.send('enterWorld', { name: 'SOLOWORLD' }); await V.wait('worldData');
+  D.send('command', { cmd: 'kick', arg: 'Victim' });
+  ok(!!(await V.wait('respawnAt')), 'kick sends the victim to spawn');
+  D.send('command', { cmd: 'worldban', arg: 'Victim' });
+  const kicked = await V.wait('kickedFromWorld');
+  ok(/banned/i.test(kicked.reason || ''), 'worldban removes the victim from the world');
+  D.send('command', { cmd: 'gameban', arg: 'Victim' });
+  ok(!!(await V.wait('gameBanned')), 'gameban notifies the victim');
+  const V2 = await client();
+  V2.send('login', { name: 'Victim', password: 'vpass' });
+  const ae = await V2.wait('authError');
+  ok(/banned/i.test(ae.text || ''), 'game-banned account cannot log in');
+  D.flush('notify');
+  D.send('command', { cmd: 'gameban', arg: '@XtremeFire' });
+  const imm = await D.wait('notify');
+  ok(/cannot ban a developer/i.test(imm.text || ''), 'developers are immune to bans');
+
   clearTimeout(fail);
   process.exit(0);
 } catch (e) {

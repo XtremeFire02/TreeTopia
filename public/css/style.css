@@ -245,6 +245,8 @@ body.touch #chatInput { opacity: .9; }
 .prof-list { list-style: none; }
 .prof-list li { background: var(--panel2); padding: 6px 10px; border-radius: 8px; margin-top: 4px; font-size: 13px; }
 .prof-list li.empty { color: var(--muted); background: none; padding: 2px 0; }
+.action-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.action-row .ghost-btn { font-size: 13px; padding: 7px 10px; }
 
 /* player tag overlay (wrench buttons over players) */
 #playerTags { position: absolute; inset: 0; pointer-events: none; z-index: 15; overflow: hidden; }

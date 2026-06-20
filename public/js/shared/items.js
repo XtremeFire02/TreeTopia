@@ -149,7 +149,7 @@ export const ITEMS = {
   crimson_eagle_wings: {
     id: 'crimson_eagle_wings', name: 'Crimson Eagle Wings', type: 'clothing', slot: 'wings',
     icon: '🦅', color: '#c01622', render: 'eagle', frames: 2, frameMs: 500,
-    price: 2500, category: 'Wings',
+    effect: 'double_jump', price: 2500, category: 'Wings',
   },
 
   // ---- equippable effect items ----

@@ -33,6 +33,8 @@ const WORLDS_DIR = path.join(DATA, 'worlds');
 const PROFILES_FILE = path.join(DATA, 'profiles.json');
 const ACCOUNTS_FILE = path.join(DATA, 'accounts.json');
 const DEVELOPERS_FILE = path.join(DATA, 'developers.json');
+const GAMEBANS_FILE = path.join(DATA, 'gamebans.json');
+const WORLD_BAN_MS = 30 * 60 * 1000;   // world-owner ban duration (30 minutes)
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const DEV_ACCOUNT_NAME = '@XtremeFire';
@@ -51,6 +53,7 @@ const players = new Map();    // id -> player
 const profiles = loadProfiles(); // name -> { gems, inventory, achievements, ownedWorlds, equipped }
 const accounts = loadAccounts();  // name -> { salt, hash }   (the account "database")
 const developers = loadDevelopers(); // Set of lowercased account names granted developer status
+const gameBans = loadGameBans();     // Set of lowercased account names banned from the whole game
 let nextId = 1;
 let dropSeq = 1;
 const dirtyWorlds = new Set();
@@ -160,6 +163,11 @@ function loadDevelopers() {
   try { return new Set(JSON.parse(fs.readFileSync(DEVELOPERS_FILE, 'utf8'))); } catch { return new Set(); }
 }
 function saveDevelopers() { fs.writeFile(DEVELOPERS_FILE, JSON.stringify([...developers]), () => {}); }
+function loadGameBans() {
+  try { return new Set(JSON.parse(fs.readFileSync(GAMEBANS_FILE, 'utf8'))); } catch { return new Set(); }
+}
+function saveGameBans() { fs.writeFile(GAMEBANS_FILE, JSON.stringify([...gameBans]), () => {}); }
+function isGameBanned(name) { return gameBans.has(normalizeAccountName(name)) && !isDeveloperName(name); }
 function offerGems(p, value) {
   const n = Math.floor(Number(value) || 0);
   return Math.max(0, Math.min(gemBalance(p), n));
@@ -187,6 +195,7 @@ function handle(p, msg) {
     case 'addAdmin':    return onAddAdmin(p, msg);
     case 'respawn':     return onRespawn(p);
     case 'chat':        return onChat(p, msg);
+    case 'command':     return onCommand(p, msg);
     case 'tradeRequest': return onTradeRequest(p, msg);
     case 'tradeAccept':  return onTradeAccept(p, msg);
     case 'tradeOffer':   return onTradeOffer(p, msg);
@@ -198,6 +207,9 @@ function handle(p, msg) {
 // ---------- accounts / login / profiles ----------
 
 function loginSuccess(p, name, extra = {}) {
+  if (isGameBanned(name)) {
+    return toPlayer(p, 'authError', { text: 'You are banned from TreeTopia.' });
+  }
   if ([...players.values()].some((pl) => pl !== p && pl.name === name)) {
     return toPlayer(p, 'authError', { text: 'That account is already logged in.' });
   }
@@ -366,8 +378,14 @@ function getWorld(name) {
 function onEnterWorld(p, msg) {
   let name = String(msg.name || '').trim().replace(/[^A-Za-z0-9_]/g, '').slice(0, 18).toUpperCase();
   if (!name) return;
-  if (p.world) leaveWorld(p);
   const w = getWorld(name);
+  const ban = worldBanRemaining(w, p.name);   // developers are immune (returns 0)
+  if (ban && !isDeveloper(p)) {
+    return toPlayer(p, 'notify', { text: ban === Infinity
+      ? `You are permanently banned from ${name}.`
+      : `You are banned from ${name} for ${Math.ceil(ban / 60000)} more min.` });
+  }
+  if (p.world) leaveWorld(p);
   p.world = name;
   const sp = w.spawnPixel();
   p.x = sp.x; p.y = sp.y; p.vx = 0; p.vy = 0; p.dead = false;
@@ -693,7 +711,150 @@ function onChat(p, msg) {
   if (!p.world) return;
   const text = String(msg.text || '').slice(0, 120);
   if (!text) return;
+  if (text[0] === '/') {                      // slash command
+    const parts = text.slice(1).split(/\s+/);
+    return runCommand(p, (parts.shift() || '').toLowerCase(), parts.join(' ').trim());
+  }
   broadcast(p.world, 'chat', { name: p.name, dev: isDeveloper(p), text });
+}
+
+// Wrench actions send the same commands the chat slash-commands run.
+function onCommand(p, msg) {
+  runCommand(p, String(msg.cmd || '').toLowerCase(), String(msg.arg || '').trim());
+}
+
+// ---------- moderation commands ----------
+// Grouped by required scope so new commands are easy to add later:
+//   'owner' = current world's owner (or any developer)
+//   'dev'   = developers only
+const COMMANDS = {
+  ban:        { scope: 'owner', run: (p, name) => cmdWorldBan(p, name, WORLD_BAN_MS) },
+  uba:        { scope: 'owner', run: (p, name) => cmdWorldUnban(p, name) },
+  kick:       { scope: 'owner', run: (p, name) => cmdKick(p, name) },
+  pull:       { scope: 'owner', run: (p, name) => cmdPull(p, name) },
+  gameban:    { scope: 'dev',   run: (p, name) => cmdGameBan(p, name) },
+  gameunban:  { scope: 'dev',   run: (p, name) => cmdGameUnban(p, name) },
+  worldban:   { scope: 'dev',   run: (p, name) => cmdWorldBan(p, name, Infinity) },
+  deleteworld:{ scope: 'dev',   run: (p) => cmdDeleteWorld(p) },
+};
+
+function isWorldOwner(p) {
+  const w = worlds.get(p.world);
+  return !!(w && w.owner && w.owner === p.name);
+}
+function runCommand(p, cmd, arg) {
+  const c = COMMANDS[cmd];
+  if (!c) return toPlayer(p, 'notify', { text: `Unknown command: /${cmd}` });
+  if (c.scope === 'dev' && !isDeveloper(p)) return toPlayer(p, 'notify', { text: 'Only developers can use that.' });
+  if (c.scope === 'owner' && !(isDeveloper(p) || isWorldOwner(p))) {
+    return toPlayer(p, 'notify', { text: 'Only the world owner can use that.' });
+  }
+  c.run(p, arg);
+}
+
+function findPlayerByName(name) {
+  const lower = normalizeAccountName(name);
+  if (!lower) return null;
+  return [...players.values()].find((pl) => pl.name && normalizeAccountName(pl.name) === lower) || null;
+}
+
+// remaining ban time (ms) for a name in world w; Infinity if permanent, 0 if none
+function worldBanRemaining(w, name) {
+  if (!w || !w.bans) return 0;
+  const key = normalizeAccountName(name);
+  const exp = w.bans[key];
+  if (exp == null) return 0;
+  if (exp === true || exp === Infinity) return Infinity;
+  const left = exp - Date.now();
+  if (left <= 0) { delete w.bans[key]; return 0; }
+  return left;
+}
+
+// remove a player from their world and bounce them to the world-select screen
+function forceLeaveWorld(target, reason) {
+  const wn = target.world;
+  if (!wn) return;
+  broadcast(wn, 'playerLeave', { id: target.id });
+  if (target.trade) cancelTrade(target, 'Trade cancelled.');
+  target.world = null;
+  toPlayer(target, 'kickedFromWorld', { reason });
+}
+
+function cmdWorldBan(p, name, durationMs) {
+  const w = worlds.get(p.world); if (!w) return;
+  const target = findPlayerByName(name);
+  const targetName = target ? target.name : name;
+  if (!targetName) return;
+  if (isDeveloperName(targetName)) return toPlayer(p, 'notify', { text: 'You cannot ban a developer.' });
+  if (normalizeAccountName(targetName) === normalizeAccountName(p.name)) return toPlayer(p, 'notify', { text: "You can't ban yourself." });
+  w.bans = w.bans || {};
+  w.bans[normalizeAccountName(targetName)] = durationMs === Infinity ? true : Date.now() + durationMs;
+  scheduleSave(p.world);
+  if (target && target.world === p.world) forceLeaveWorld(target, `You were banned from ${w.name}.`);
+  toPlayer(p, 'notify', { text: durationMs === Infinity ? `${targetName} is permanently banned from ${w.name}.` : `${targetName} is banned from ${w.name} for 30 min.` });
+}
+function cmdWorldUnban(p, name) {
+  const w = worlds.get(p.world); if (!w || !w.bans) return;
+  const key = normalizeAccountName(name);
+  if (w.bans[key] == null) return toPlayer(p, 'notify', { text: `${name} is not banned here.` });
+  delete w.bans[key];
+  scheduleSave(p.world);
+  toPlayer(p, 'notify', { text: `Unbanned ${name} from ${w.name}.` });
+}
+function cmdKick(p, name) {
+  const w = worlds.get(p.world); if (!w) return;
+  const target = findPlayerByName(name);
+  if (!target || target.world !== p.world) return toPlayer(p, 'notify', { text: `${name} is not in this world.` });
+  if (isDeveloper(target)) return toPlayer(p, 'notify', { text: 'You cannot kick a developer.' });
+  const sp = w.spawnPixel();
+  target.x = sp.x; target.y = sp.y; target.vx = 0; target.vy = 0;
+  toPlayer(target, 'respawnAt', { x: sp.x, y: sp.y });
+  toPlayer(target, 'notify', { text: 'You were sent back to spawn.' });
+  broadcast(p.world, 'playerMove', publicPlayer(target), target.id);
+  toPlayer(p, 'notify', { text: `Kicked ${target.name} to spawn.` });
+}
+function cmdPull(p, name) {
+  const target = findPlayerByName(name);
+  if (!target || target.world !== p.world) return toPlayer(p, 'notify', { text: `${name} is not in this world.` });
+  if (isDeveloper(target)) return toPlayer(p, 'notify', { text: 'You cannot pull a developer.' });
+  target.x = p.x; target.y = p.y; target.vx = 0; target.vy = 0;
+  toPlayer(target, 'respawnAt', { x: p.x, y: p.y });
+  toPlayer(target, 'notify', { text: `${p.name} pulled you.` });
+  broadcast(p.world, 'playerMove', publicPlayer(target), target.id);
+  toPlayer(p, 'notify', { text: `Pulled ${target.name} to you.` });
+}
+function cmdGameBan(p, name) {
+  const target = findPlayerByName(name);
+  const targetName = target ? target.name : name;
+  if (!targetName) return;
+  if (isDeveloperName(targetName)) return toPlayer(p, 'notify', { text: 'You cannot ban a developer.' });
+  gameBans.add(normalizeAccountName(targetName));
+  saveGameBans();
+  if (target) {
+    if (target.world) forceLeaveWorld(target, 'You were banned from TreeTopia.');
+    toPlayer(target, 'gameBanned', { reason: 'You have been banned from TreeTopia.' });
+    setTimeout(() => { try { target.ws.close(); } catch { /* already closed */ } }, 150);
+  }
+  toPlayer(p, 'notify', { text: `Game-banned ${targetName}.` });
+}
+function cmdGameUnban(p, name) {
+  const key = normalizeAccountName(name);
+  if (!gameBans.has(key)) return toPlayer(p, 'notify', { text: `${name} is not game-banned.` });
+  gameBans.delete(key);
+  saveGameBans();
+  toPlayer(p, 'notify', { text: `Game-unbanned ${name}.` });
+}
+function cmdDeleteWorld(p) {
+  const wn = p.world; if (!wn) return;
+  const w = worlds.get(wn);
+  for (const pl of [...players.values()]) {
+    if (pl.world === wn) forceLeaveWorld(pl, `World ${wn} was deleted by a developer.`);
+  }
+  if (w) { if (w.owner) removeOwnedWorld(w.owner, wn); }
+  worlds.delete(wn);
+  dirtyWorlds.delete(wn);
+  try { fs.unlinkSync(path.join(WORLDS_DIR, wn + '.json')); } catch { /* never saved */ }
+  toPlayer(p, 'notify', { text: `Deleted world ${wn}.` });
 }
 
 // ---------- trading ----------
