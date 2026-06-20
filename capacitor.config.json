@@ -4,7 +4,8 @@
   "webDir": "public",
   "backgroundColor": "#1b2330",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "http",
+    "cleartext": true
   },
   "ios": {
     "contentInset": "always"
