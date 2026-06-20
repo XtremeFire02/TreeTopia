@@ -14,7 +14,7 @@ import {
 } from '../public/js/shared/constants.js';
 import {
   ITEMS, spliceResult, rollDrops, rollHarvest, isSolid,
-  PERMANENT, hasEffect, isPlaceable,
+  PERMANENT, STARTER_CLOTHING, hasEffect, isPlaceable, isClothing,
 } from '../public/js/shared/items.js';
 
 const ACHIEVEMENTS = {
@@ -32,9 +32,12 @@ const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 const WORLDS_DIR = path.join(DATA, 'worlds');
 const PROFILES_FILE = path.join(DATA, 'profiles.json');
 const ACCOUNTS_FILE = path.join(DATA, 'accounts.json');
+const DEVELOPERS_FILE = path.join(DATA, 'developers.json');
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const DEV_ACCOUNT_NAME = '@XtremeFire';
+// The founder account is always a developer. Additional developers are granted
+// at runtime by an existing developer and persisted in developers.json.
 const DEV_ACCOUNTS = new Set([DEV_ACCOUNT_NAME.toLowerCase()]);
 const DEV_GEM_BALANCE = Number.MAX_SAFE_INTEGER;
 const REGULAR_NAME_RE = /^[A-Za-z0-9]{3,16}$/;
@@ -45,8 +48,9 @@ fs.mkdirSync(WORLDS_DIR, { recursive: true });
 // ---------- in-memory state ----------
 const worlds = new Map();     // NAME -> World (loaded)
 const players = new Map();    // id -> player
-const profiles = loadProfiles(); // name -> { gems, inventory, achievements, ownedWorlds }
+const profiles = loadProfiles(); // name -> { gems, inventory, achievements, ownedWorlds, equipped }
 const accounts = loadAccounts();  // name -> { salt, hash }   (the account "database")
+const developers = loadDevelopers(); // Set of lowercased account names granted developer status
 let nextId = 1;
 let dropSeq = 1;
 const dirtyWorlds = new Set();
@@ -79,6 +83,7 @@ wss.on('connection', (ws) => {
     id, ws, name: null, world: null,
     x: 0, y: 0, vx: 0, vy: 0, dir: 1, anim: 'idle',
     inventory: {}, gems: 0, trade: null, dead: false,
+    equipped: {}, dev: false,
   };
   players.set(id, player);
 
@@ -114,7 +119,11 @@ function playersInWorld(worldName) {
   return list;
 }
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, x: p.x, y: p.y, dir: p.dir, anim: p.anim, punchAngle: p.punchAngle || 0, punchDist: p.punchDist || 0, punchSeq: p.punchSeq ?? 0 };
+  return {
+    id: p.id, name: p.name, dev: isDeveloper(p), equipped: p.equipped || {},
+    x: p.x, y: p.y, dir: p.dir, anim: p.anim,
+    punchAngle: p.punchAngle || 0, punchDist: p.punchDist || 0, punchSeq: p.punchSeq ?? 0,
+  };
 }
 
 function normalizeAccountName(name) { return String(name || '').toLowerCase(); }
@@ -135,12 +144,22 @@ function validateAccountName(name, { allowDeveloper = false, allowEmpty = false 
   if (!REGULAR_NAME_RE.test(clean)) return { name: clean, error: USERNAME_RULE_TEXT };
   return { name: clean, error: null };
 }
-function isDeveloperName(name) { return isReservedDeveloperName(name) && !!accounts[DEV_ACCOUNT_NAME]; }
+function isDeveloperName(name) {
+  if (isReservedDeveloperName(name)) return !!accounts[DEV_ACCOUNT_NAME];
+  return developers.has(normalizeAccountName(name));
+}
 function isDeveloper(p) { return !!(p && isDeveloperName(p.name)); }
+// Developers display with infinite gems, but we keep their REAL balance in
+// p.gems untouched so the value survives if their developer status is removed.
 function gemBalance(p) { return isDeveloper(p) ? DEV_GEM_BALANCE : (p.gems || 0); }
 function canAffordGems(p, amount) { return isDeveloper(p) || (p.gems || 0) >= amount; }
-function spendGems(p, amount) { if (isDeveloper(p)) p.gems = DEV_GEM_BALANCE; else p.gems -= amount; }
-function grantGems(p, amount) { p.gems = isDeveloper(p) ? DEV_GEM_BALANCE : (p.gems || 0) + amount; }
+function spendGems(p, amount) { if (!isDeveloper(p)) p.gems = Math.max(0, (p.gems || 0) - amount); }
+function grantGems(p, amount) { if (!isDeveloper(p)) p.gems = (p.gems || 0) + amount; }
+
+function loadDevelopers() {
+  try { return new Set(JSON.parse(fs.readFileSync(DEVELOPERS_FILE, 'utf8'))); } catch { return new Set(); }
+}
+function saveDevelopers() { fs.writeFile(DEVELOPERS_FILE, JSON.stringify([...developers]), () => {}); }
 function offerGems(p, value) {
   const n = Math.floor(Number(value) || 0);
   return Math.max(0, Math.min(gemBalance(p), n));
@@ -161,6 +180,9 @@ function handle(p, msg) {
     case 'place':       return onPlace(p, msg);
     case 'buy':         return onBuy(p, msg);
     case 'splice':      return onSplice(p, msg);
+    case 'equip':       return onEquip(p, msg);
+    case 'setDeveloper': return onSetDeveloper(p, msg);
+    case 'getDevelopers': return onGetDevelopers(p);
     case 'addAdmin':    return onAddAdmin(p, msg);
     case 'respawn':     return onRespawn(p);
     case 'chat':        return onChat(p, msg);
@@ -185,15 +207,18 @@ function loginSuccess(p, name) {
     p.inventory = { ...(prof.inventory || {}) };
     p.achievements = prof.achievements || [];
     p.ownedWorlds = prof.ownedWorlds || [];
+    p.equipped = { ...(prof.equipped || {}) };
   } else {
     p.gems = 100;
     p.inventory = { dirt: 10, dirt_seed: 3, small_lock: 1 };
     p.achievements = []; p.ownedWorlds = [];
+    p.equipped = {};          // spawn naked — clothing is equipped from the inventory
   }
-  if (isDeveloper(p)) p.gems = DEV_GEM_BALANCE;
-  for (const t of PERMANENT) p.inventory[t] = 1; // always-present tools
+  p.dev = isDeveloper(p);
+  for (const t of PERMANENT) p.inventory[t] = 1;                 // always-present tools
+  for (const c of STARTER_CLOTHING) if (!p.inventory[c]) p.inventory[c] = 1; // own your clothes
   saveProfile(p);
-  toPlayer(p, 'welcome', { id: p.id, name: p.name, gems: gemBalance(p), inventory: p.inventory });
+  toPlayer(p, 'welcome', { id: p.id, name: p.name, dev: p.dev, gems: gemBalance(p), inventory: p.inventory, equipped: p.equipped });
   onGetWorlds(p);
 }
 
@@ -248,7 +273,8 @@ function onGetProfile(p, msg) {
   if (hasEffect(inv, 'double_jump')) effects.push('🪽 Double Jump (Angel Wings)');
   if (hasEffect(inv, 'long_punch')) effects.push('👁️ Long Punch (Cyclopean Visor)');
   toPlayer(p, 'profile', {
-    name, online: !!online, gems: isDeveloperName(name) ? DEV_GEM_BALANCE : (prof.gems || 0),
+    name, online: !!online, dev: isDeveloperName(name),
+    gems: isDeveloperName(name) ? DEV_GEM_BALANCE : (prof.gems || 0),
     achievements: (prof.achievements || []).map((id) => ACHIEVEMENTS[id] || id),
     ownedWorlds: prof.ownedWorlds || [],
     effects,
@@ -333,6 +359,7 @@ function onEnterWorld(p, msg) {
     players: playersInWorld(name).filter((pl) => pl.id !== p.id),
     you: publicPlayer(p),
     canBuild: w.canModify(p.name, w.spawn.tx, w.spawn.ty + 2),
+    ownerDev: isDeveloperName(w.owner),
   });
   broadcast(name, 'playerJoin', { player: publicPlayer(p) }, p.id);
 }
@@ -393,28 +420,33 @@ function onBreak(p, msg) {
   const def = ITEMS[fg];
   if (!def) return;
   if (w.data[i] && w.data[i].main) { return toPlayer(p, 'notify', { text: "The world's main door can't be broken." }); }
-  if (def.hardness === Infinity) return; // bedrock / locks (locks broken via owner only below)
 
-  // lock removal — only owner may remove their lock
+  // lock removal — the lock owner, its admins, or any developer may remove it.
+  // (Checked before the unbreakable-hardness guard below, since locks are
+  // intentionally "unbreakable" to everyone except those parties.)
   if (def.type === 'lock') {
     const d = w.data[i];
-    if (!d || !d.lock || (d.lock.owner !== p.name && !d.lock.admins.includes(p.name))) {
-      return toPlayer(p, 'notify', { text: 'Only the lock owner can remove it.' });
+    const lockOwner = d && d.lock ? d.lock.owner : null;
+    const allowed = isDeveloper(p) || (d && d.lock && (lockOwner === p.name || d.lock.admins.includes(p.name)));
+    if (!allowed) {
+      return toPlayer(p, 'notify', { text: 'Only the lock owner (or a developer) can remove it.' });
     }
     if (d.lock.scope === 'world') {
       w.owner = null; w.admins = [];
-      p.ownedWorlds = (p.ownedWorlds || []).filter((n) => n !== w.name);
-      saveProfile(p);
+      removeOwnedWorld(lockOwner, w.name);
     }
     grant(p, fg, 1);
     w.clearTile(x, y);
+    delete w.data[i];                    // free the locked area (clearTile keeps lock data)
     broadcast(p.world, 'tileUpdate', { x, y, fg: '', data: null });
     sendInventory(p);
     scheduleSave(p.world);
     return;
   }
 
-  if (!w.canModify(p.name, x, y)) {
+  if (def.hardness === Infinity) return; // bedrock — unbreakable
+
+  if (!isDeveloper(p) && !w.canModify(p.name, x, y)) {
     const info = w.ownerInfoAt(x, y);
     return toPlayer(p, 'notify', { text: `Area locked by ${info ? info.owner : 'someone'}.` });
   }
@@ -448,8 +480,11 @@ function onPlace(p, msg) {
   const i = w.idx(x, y);
 
   if (def.type === 'lock') {
+    if (playerOverlapsTile(p.world, x, y)) {
+      return toPlayer(p, 'notify', { text: "Can't place a lock on a player." });
+    }
     if (!w.placeLock(p.name, x, y, itemId)) {
-      return toPlayer(p, 'notify', { text: 'Cannot place a lock here.' });
+      return toPlayer(p, 'notify', { text: w.owner ? 'This world already has a World Lock.' : 'Cannot place a lock here.' });
     }
     take(p, itemId, 1);
     broadcast(p.world, 'tileUpdate', { x, y, fg: itemId, data: w.data[i] });
@@ -465,7 +500,7 @@ function onPlace(p, msg) {
     return;
   }
 
-  if (!w.canModify(p.name, x, y)) {
+  if (!isDeveloper(p) && !w.canModify(p.name, x, y)) {
     const info = w.ownerInfoAt(x, y);
     return toPlayer(p, 'notify', { text: `Area locked by ${info ? info.owner : 'someone'}.` });
   }
@@ -539,6 +574,61 @@ function onSplice(p, msg) {
   toPlayer(p, 'notify', { text: `Spliced into ${ITEMS[result].name}!` });
 }
 
+// ---------- clothing: equip / unequip ----------
+function onEquip(p, msg) {
+  const id = msg.itemId;
+  if (!isClothing(id) || !has(p, id, 1)) return;   // must own the garment to wear it
+  const slot = ITEMS[id].slot || 'body';
+  if (!p.equipped) p.equipped = {};
+  if (p.equipped[slot] === id) delete p.equipped[slot]; // double-tap again to take it off
+  else p.equipped[slot] = id;                           // wear it (replaces anything in that slot)
+  sendInventory(p);                                     // updates the player's own view (+ equipped flags)
+  if (p.world) broadcast(p.world, 'playerMove', publicPlayer(p), p.id); // others see the outfit change
+  saveProfile(p);
+}
+
+// ---------- developer class: grant / remove (developers only) ----------
+function onSetDeveloper(p, msg) {
+  if (!isDeveloper(p)) return toPlayer(p, 'notify', { text: 'Only developers can manage developer status.' });
+  const { name, error } = validateAccountName(msg.name, { allowDeveloper: true });
+  if (error) return toPlayer(p, 'notify', { text: error });
+  if (isReservedDeveloperName(name)) return toPlayer(p, 'notify', { text: 'The founder developer account cannot be changed.' });
+  const lower = normalizeAccountName(name);
+  const grant = !!msg.grant;
+  if (grant) developers.add(lower); else developers.delete(lower);
+  saveDevelopers();
+
+  // apply immediately to that player if they're online (without bouncing them
+  // back to the world-select screen the way a full 'welcome' would)
+  const target = [...players.values()].find((pl) => normalizeAccountName(pl.name) === lower);
+  if (target) {
+    target.dev = isDeveloper(target);
+    toPlayer(target, 'devStatus', { dev: target.dev });
+    sendInventory(target); // refresh gem display (infinite vs real)
+    if (target.world) broadcast(target.world, 'playerMove', publicPlayer(target), target.id);
+    toPlayer(target, 'notify', { text: grant ? '👑 You are now a developer!' : 'Your developer status was removed.' });
+  }
+  toPlayer(p, 'notify', { text: `${grant ? 'Granted' : 'Removed'} developer for ${name}.` });
+  toPlayer(p, 'devList', { developers: [...developers] });
+}
+
+function onGetDevelopers(p) {
+  if (!isDeveloper(p)) return;
+  toPlayer(p, 'devList', { developers: [...developers] });
+}
+
+// Remove a world from its owner's profile (works whether they're online or not).
+function removeOwnedWorld(name, worldName) {
+  if (!name) return;
+  const online = [...players.values()].find((pl) => pl.name === name);
+  if (online) {
+    online.ownedWorlds = (online.ownedWorlds || []).filter((n) => n !== worldName);
+    saveProfile(online);
+  } else if (profiles[name]) {
+    profiles[name].ownedWorlds = (profiles[name].ownedWorlds || []).filter((n) => n !== worldName);
+  }
+}
+
 // ---------- admins ----------
 function onAddAdmin(p, msg) {
   const w = worlds.get(p.world); if (!w) return;
@@ -567,7 +657,7 @@ function onChat(p, msg) {
   if (!p.world) return;
   const text = String(msg.text || '').slice(0, 120);
   if (!text) return;
-  broadcast(p.world, 'chat', { name: p.name, text });
+  broadcast(p.world, 'chat', { name: p.name, dev: isDeveloper(p), text });
 }
 
 // ---------- trading ----------
@@ -657,7 +747,7 @@ function take(p, id, n) {
   if (p.inventory[id] <= 0) delete p.inventory[id];
 }
 function sendInventory(p) {
-  toPlayer(p, 'inventory', { inventory: p.inventory, gems: gemBalance(p) });
+  toPlayer(p, 'inventory', { inventory: p.inventory, gems: gemBalance(p), equipped: p.equipped || {} });
   if (gemBalance(p) >= 1000) award(p, 'rich');
   saveProfile(p);
 }
@@ -687,7 +777,7 @@ function loadProfiles() {
 }
 function saveProfile(p) {
   if (!p.name) return;
-  profiles[p.name] = { gems: gemBalance(p), inventory: p.inventory, achievements: p.achievements || [], ownedWorlds: p.ownedWorlds || [] };
+  profiles[p.name] = { gems: p.gems || 0, inventory: p.inventory, achievements: p.achievements || [], ownedWorlds: p.ownedWorlds || [], equipped: p.equipped || {} };
   clearTimeout(saveProfile._t);
   saveProfile._t = setTimeout(() => {
     fs.writeFile(PROFILES_FILE, JSON.stringify(profiles), () => {});

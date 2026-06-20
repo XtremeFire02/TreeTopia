@@ -1,0 +1,13 @@
+{
+  "appId": "com.treetopia.game",
+  "appName": "TreeTopia",
+  "webDir": "public",
+  "backgroundColor": "#1b2330",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

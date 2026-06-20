@@ -5,9 +5,23 @@
   "type": "module",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "app:sync": "cap sync",
+    "app:add:ios": "cap add ios",
+    "app:add:android": "cap add android",
+    "app:ios": "cap sync ios && cap open ios",
+    "app:android": "cap sync android && cap open android",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@tauri-apps/cli": "^2.0.0"
   }
 }

@@ -4,9 +4,12 @@ import {
   PLAYER_W, PLAYER_H, REACH, RESPAWN_MS, BREAK_RESET_MS,
 } from './shared/constants.js';
 import { ITEMS, isSolid, hasEffect, isPlaceable } from './shared/items.js';
-import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE, isDeveloperName } from './shared/names.js';
+import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE } from './shared/names.js';
 import { keys, mouse } from './input.js';
 import { tileSprite, dropSprite, playerSprite } from './assets.js';
+
+const NAKED_BODY_COLOR = '#8a5a2b';   // flat brown body shown when no outfit is equipped
+function isClothed(equipped) { return !!(equipped && equipped.body); }
 
 export class Game {
   constructor(net, ui) {
@@ -14,7 +17,7 @@ export class Game {
     this.ui = ui;
     this.canvas = document.getElementById('canvas');
     this.ctx = this.canvas.getContext('2d');
-    this.me = { id: 0, name: '', gems: 0, inventory: {} };
+    this.me = { id: 0, name: '', gems: 0, inventory: {}, equipped: {}, dev: false };
 
     this.world = null;
     this.drops = new Map();
@@ -26,6 +29,7 @@ export class Game {
     this.camera = { x: 0, y: 0 };
     this.selected = null;          // item id chosen on hotbar for placing
     this.touchBgMode = false;      // mobile: place into the background layer (Shift on desktop)
+    this.punchHeld = false;        // mobile: on-screen punch button held
     this.running = false;
     this._lastMoveSend = 0;
     this._lastAction = 0;
@@ -61,6 +65,8 @@ export class Game {
       }
       o.tx = m.x; o.ty = m.y; o.dir = m.dir; o.anim = m.anim; o.name = m.name;
       o.punchAngle = m.punchAngle || 0; o.punchDist = m.punchDist || 0; o.punchSeq = punchSeq;
+      if (m.equipped) o.equipped = m.equipped;
+      if (m.dev !== undefined) o.dev = m.dev;
       this.others.set(m.id, o);
     });
     n.on('breakProgress', (m) => {
@@ -68,7 +74,12 @@ export class Game {
     });
     n.on('breakReset', (m) => this.breakFx.delete(m.x + ',' + m.y));
     n.on('respawnAt', (m) => { this.local.x = m.x; this.local.y = m.y; this.local.vx = 0; this.local.vy = 0; });
-    n.on('inventory', (m) => { this.me.inventory = m.inventory; this.me.gems = m.gems; this.ui.onInventory(); });
+    n.on('inventory', (m) => {
+      this.me.inventory = m.inventory; this.me.gems = m.gems;
+      if (m.equipped) this.me.equipped = m.equipped;
+      this.ui.onInventory();
+    });
+    n.on('devStatus', (m) => { this.me.dev = !!m.dev; this.ui.onDevStatus(); });
   }
 
   onWorldData(m) {
@@ -79,7 +90,7 @@ export class Game {
     (m.players || []).forEach((p) => this.others.set(p.id, mkOther(p)));
     this.local.x = m.you.x; this.local.y = m.you.y; this.local.vx = 0; this.local.vy = 0; this.local.dead = false;
     this.breakFx.clear(); this.particles.length = 0;
-    this.ui.onEnterWorld(m.world, m.canBuild);
+    this.ui.onEnterWorld(m.world, m.ownerDev);
     document.dispatchEvent(new Event('enteredWorld'));
     this.start();
   }
@@ -161,6 +172,7 @@ export class Game {
 
     // mouse build/break (may start a punch)
     this.handleBuild(now);
+    this.handlePunchButton(now);   // on-screen punch button (mobile)
     if (now - L.punchAt < 220) { L.anim = 'punch'; L.dir = L.punchDir; } // face the punch
 
     this.updateParticles(dt);
@@ -260,6 +272,24 @@ export class Game {
       this._lastAction = now;
       this.net.send('place', { x: t.x, y: t.y, itemId: this.selected, layer: (keys['shift'] || this.touchBgMode) ? 1 : 0 });
     }
+  }
+  // On-screen punch button: break the tile directly in front of the player.
+  handlePunchButton(now) {
+    if (!this.punchHeld || !this.world) return;
+    if (this.ui.modalOpen() || this.selected === 'wrench') return;
+    if (now - this._lastAction <= 200) return;
+    const tx = Math.floor(this.local.x / TILE) + this.local.dir;
+    const ty = Math.floor((this.local.y - TILE / 2) / TILE);
+    if (tx < 0 || ty < 0 || tx >= this.world.width || ty >= this.world.height) return;
+    if (!this.inReach(tx, ty)) return;
+    this._lastAction = now; this.local.punchAt = now; this.local.punchSeq++;
+    const tcx = (tx + 0.5) * TILE, tcy = (ty + 0.5) * TILE;
+    const dx = tcx - this.local.x, dy = tcy - (this.local.y - TILE * 0.55);
+    const maxReach = (REACH + (hasEffect(this.me.inventory, 'long_punch') ? 2 : 0)) * TILE;
+    this.local.punchAngle = Math.atan2(dy, dx);
+    this.local.punchDist = Math.min(Math.hypot(dx, dy), maxReach);
+    this.local.punchDir = Math.cos(this.local.punchAngle) >= 0 ? 1 : -1;
+    this.net.send('break', { x: tx, y: ty });
   }
   pointerTile() {
     const wx = mouse.sx + this.camera.x, wy = mouse.sy + this.camera.y;
@@ -389,14 +419,15 @@ export class Game {
     }
 
     // other players
-    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0);
+    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, clothed: isClothed(o.equipped) });
 
     // local player
+    const meOpts = { dev: this.me.dev, clothed: isClothed(this.me.equipped) };
     if (this.local.dead) {
       const k = (now - this.local.deadAt) / RESPAWN_MS;
-      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY - k * 40, this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k);
+      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY - k * 40, this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k, 0, 0, 0, meOpts);
     } else {
-      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY, this.local.dir, this.local.anim, this.local.walkT, this.me.name, 1, 0, now - this.local.punchAt, this.local.punchAngle, this.local.punchDist);
+      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY, this.local.dir, this.local.anim, this.local.walkT, this.me.name, 1, 0, now - this.local.punchAt, this.local.punchAngle, this.local.punchDist, meOpts);
     }
 
     // particles
@@ -517,7 +548,9 @@ export class Game {
     }
   }
 
-  drawCharacter(ctx, x, y, dir, anim, walkT, name, alpha = 1, deadK = 0, punchT = 0, punchAngle = 0, punchDist = 0) {
+  drawCharacter(ctx, x, y, dir, anim, walkT, name, alpha = 1, deadK = 0, punchT = 0, punchAngle = 0, punchDist = 0, opts = {}) {
+    const dev = !!opts.dev;
+    const clothed = !!opts.clothed;
     const H = TILE; // exactly one block tall
     let frame = 'stand';
     if (anim === 'dead' || anim === 'hurt') frame = 'hurt';
@@ -541,31 +574,39 @@ export class Game {
     if (dir < 0) ctx.scale(-1, 1); // body faces the cursor side
     if (sp) {
       const scale = H / sp.naturalHeight; // body centred on source column x=10
-      ctx.drawImage(sp, -10 * scale, -H, sp.naturalWidth * scale, H);
+      const dx = -10 * scale, dw = sp.naturalWidth * scale;
+      ctx.drawImage(sp, dx, -H, dw, H);
+      if (!clothed) {
+        // "naked": recolor the whole body a flat brown (clothing is its own item)
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = NAKED_BODY_COLOR;
+        ctx.fillRect(dx, -H, dw, H);
+        ctx.globalCompositeOperation = 'source-over';
+      }
     } else {
-      ctx.fillStyle = '#5aa83a'; roundRect(ctx, -10, -H + 2, 20, H - 4, 5); ctx.fill();
+      ctx.fillStyle = clothed ? '#5aa83a' : NAKED_BODY_COLOR; roundRect(ctx, -10, -H + 2, 20, H - 4, 5); ctx.fill();
     }
     ctx.restore();
 
-    // name tag
+    // name tag — developers show a yellow, @-prefixed name
     if (name) {
-      const developer = isDeveloperName(name);
-      const nameFill = developer ? DEVELOPER_NAME_COLOR : '#fff';
-      const nameStroke = developer ? DEVELOPER_NAME_STROKE : 'rgba(0,0,0,.6)';
+      const label = dev && !String(name).startsWith('@') ? '@' + name : name;
+      const nameFill = dev ? DEVELOPER_NAME_COLOR : '#fff';
+      const nameStroke = dev ? DEVELOPER_NAME_STROKE : 'rgba(0,0,0,.6)';
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      ctx.fillStyle = nameFill; ctx.strokeStyle = nameStroke; ctx.lineWidth = developer ? 4 : 3;
-      if (developer) { ctx.shadowColor = 'rgba(184,134,11,.35)'; ctx.shadowBlur = 4; }
-      ctx.strokeText(name, x, y - H - 4);
-      ctx.fillText(name, x, y - H - 4);
+      ctx.fillStyle = nameFill; ctx.strokeStyle = nameStroke; ctx.lineWidth = dev ? 4 : 3;
+      if (dev) { ctx.shadowColor = 'rgba(184,134,11,.35)'; ctx.shadowBlur = 4; }
+      ctx.strokeText(label, x, y - H - 4);
+      ctx.fillText(label, x, y - H - 4);
       ctx.restore();
     }
   }
 }
 
 // ---------- helpers ----------
-function mkOther(p) { return { id: p.id, name: p.name, x: p.x, y: p.y, tx: p.x, ty: p.y, dir: p.dir || 1, anim: p.anim || 'idle', walkT: 0, punchAt: 0, punchAngle: 0, punchDist: 0, punchSeq: p.punchSeq ?? 0 }; }
+function mkOther(p) { return { id: p.id, name: p.name, dev: !!p.dev, equipped: p.equipped || {}, x: p.x, y: p.y, tx: p.x, ty: p.y, dir: p.dir || 1, anim: p.anim || 'idle', walkT: 0, punchAt: 0, punchAngle: 0, punchDist: 0, punchSeq: p.punchSeq ?? 0 }; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 // Big comically-oversized punching fist with a forearm that tapers from the

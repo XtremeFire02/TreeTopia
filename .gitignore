@@ -1,3 +1,13 @@
 node_modules/
 server/data/
 *.log
+
+# Native app build outputs (generated locally; see docs/APPS.md)
+/ios/
+/android/
+/src-tauri/target/
+/src-tauri/gen/
+.gradle/
+*.apk
+*.aab
+*.ipa

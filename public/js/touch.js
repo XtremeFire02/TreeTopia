@@ -22,6 +22,16 @@ export function initTouch(game) {
   bindHold(document.querySelector('#touchControls [data-dir="right"]'), 'arrowright');
   bindHold(document.querySelector('#touchControls [data-jump]'), ' ');
 
+  // punch button: hold to keep breaking the tile in front of the player
+  const punchBtn = document.querySelector('#touchControls [data-punch]');
+  if (punchBtn) {
+    const set = (v) => (e) => { e.preventDefault(); game.punchHeld = v; };
+    punchBtn.addEventListener('pointerdown', (e) => { try { punchBtn.setPointerCapture(e.pointerId); } catch {} set(true)(e); });
+    punchBtn.addEventListener('pointerup', set(false));
+    punchBtn.addEventListener('pointercancel', set(false));
+    punchBtn.addEventListener('pointerleave', set(false));
+  }
+
   const bgBtn = document.querySelector('#touchControls [data-bg]');
   if (bgBtn) {
     bgBtn.addEventListener('click', () => {
