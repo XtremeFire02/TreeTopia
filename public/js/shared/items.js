@@ -152,8 +152,12 @@ export const ITEMS = {
     price: 2500, category: 'Wings',
   },
 
-  // ---- equippable effect items (grant an effect while in your inventory) ----
-  wings: { id: 'wings', name: 'Angel Wings', type: 'effect', icon: '🪽', effect: 'double_jump', price: 800 },
+  // ---- equippable effect items ----
+  // Angel Wings: a wings-slot garment that ALSO grants double-jump while owned.
+  wings: {
+    id: 'wings', name: 'Angel Wings', type: 'clothing', slot: 'wings', icon: '🪽',
+    effect: 'double_jump', color: '#eaf2ff', frames: 2, frameMs: 600, price: 800, category: 'Wings',
+  },
   cyclopean_visor: { id: 'cyclopean_visor', name: 'Cyclopean Visor', type: 'effect', icon: '👁️', effect: 'long_punch', price: 600 },
 };
 

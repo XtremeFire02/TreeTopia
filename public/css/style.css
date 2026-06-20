@@ -119,8 +119,17 @@ input:focus, select:focus { border-color: var(--accent2); }
   text-shadow: 0 1px 0 #2b1d00, 0 0 8px rgba(184,134,11,.35);
 }
 #chatLog .sys { color: var(--gold); font-style: italic; }
+.chat-row { display: flex; gap: 6px; align-items: stretch; }
 #chatInput { width: 100%; opacity: .5; transition: opacity .15s; margin: 0; }
 #chatInput:focus { opacity: 1; }
+#chatSend {
+  display: none; flex: 0 0 auto; width: 44px; border: none; border-radius: 9px; cursor: pointer;
+  background: var(--accent2); color: #fff; font-size: 18px; line-height: 1;
+}
+#chatSend:active { filter: brightness(1.1); }
+/* on touch there is no Enter key, so always show the Send button + a tappable box */
+body.touch #chatSend { display: block; }
+body.touch #chatInput { opacity: .9; }
 
 #controls {
   position: absolute; bottom: 78px; right: 14px; font-size: 11px; color: var(--muted);

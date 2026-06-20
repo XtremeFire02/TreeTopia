@@ -609,13 +609,9 @@ function drawAvatar(ctx, H, eq, swing, anim) {
   const shoeColor = eq.shoes ? col('shoes', '#5a3a1a') : null;
 
   if (eq.wings) {
-    const wIt = ITEMS[eq.wings];
-    if (wIt && wIt.render === 'eagle') {
-      const frame = Math.floor(performance.now() / (wIt.frameMs || 500)) % (wIt.frames || 2);
-      drawEagleWings(ctx, shoulderY, frame, wIt.color || '#c01622');
-    } else {
-      drawWings(ctx, shoulderY, col('wings', '#eef2f8'));
-    }
+    const wIt = ITEMS[eq.wings] || {};
+    const frame = Math.floor(performance.now() / (wIt.frameMs || 500)) % (wIt.frames || 2);
+    drawFeatheredWings(ctx, shoulderY, wIt.color || '#eef2f8', frame);
   }
   if (eq.pet) drawPet(ctx, col('pet', '#7bc24a'));
 
@@ -633,12 +629,27 @@ function drawAvatar(ctx, H, eq, swing, anim) {
 
   if (eq.scarf) { ctx.fillStyle = col('scarf', '#d24a4a'); roundRect(ctx, -torsoW / 2 - 1, torsoTop - 2, torsoW + 2, 4, 2); ctx.fill(); }
 
-  // head + simple forward-facing face
+  // head drawn as a clear SIDE PROFILE so facing is unambiguous (faces +x):
+  // skin head, hair covering top + back (−x), a nose poking out front (+x),
+  // and a single eye near the front.
   ctx.fillStyle = SKIN;
   ctx.beginPath(); ctx.arc(0, headCY, headR, 0, 7); ctx.fill();
+  // hair: cap over the top and the back half
+  ctx.fillStyle = '#3a2a1a';
+  ctx.beginPath();
+  ctx.arc(0, headCY, headR + 0.3, Math.PI * 0.62, Math.PI * 1.95);
+  ctx.lineTo(0, headCY - 1);
+  ctx.closePath(); ctx.fill();
+  // nose on the front edge
+  ctx.fillStyle = shade(SKIN, -0.12);
+  ctx.beginPath();
+  ctx.moveTo(headR - 1, headCY - 0.5);
+  ctx.lineTo(headR + 1.8, headCY + 1);
+  ctx.lineTo(headR - 1, headCY + 2.2);
+  ctx.closePath(); ctx.fill();
+  // eye near the front
   ctx.fillStyle = '#2b2b33';
-  ctx.beginPath(); ctx.arc(2.4, headCY - 0.8, 0.9, 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.arc(-0.3, headCY - 0.8, 0.9, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(headR * 0.42, headCY - 0.6, 1, 0, 7); ctx.fill();
 }
 
 // a rounded-rect limb that hangs from a pivot and rotates by `angle`
@@ -649,43 +660,42 @@ function drawLimb(ctx, px, py, len, w, angle, color, shoeColor) {
   ctx.restore();
 }
 
-// wings sit BEHIND the body (drawn first) and sweep toward the back (−x),
-// since the figure faces +x
-function drawWings(ctx, shoulderY, color) {
-  const midY = shoulderY + 4;
-  ctx.fillStyle = color;
-  for (const dy of [-5, 3]) {        // two stacked feathers, both pointing back
-    ctx.beginPath();
-    ctx.moveTo(-1, midY);
-    ctx.quadraticCurveTo(-17, midY + dy - 4, -15, midY + dy + 5);
-    ctx.quadraticCurveTo(-9, midY + 4, -1, midY + 3);
-    ctx.closePath(); ctx.fill();
-  }
-  ctx.strokeStyle = shade(color, -0.2); ctx.lineWidth = 0.6;
-  ctx.beginPath(); ctx.moveTo(-2, midY); ctx.lineTo(-14, midY - 2); ctx.stroke();
+// A SYMMETRIC feathered wing pair, mounted on the back and spreading up and out
+// to BOTH sides (the classic winged-back look). Animated: `frame` toggles the
+// spread so the wings flap. Drawn behind the body.
+function drawFeatheredWings(ctx, shoulderY, color, frame) {
+  const ay = shoulderY + 2;
+  const spread = frame === 0 ? 1 : 0.82;          // flap: up-beat vs down-beat
+  drawWing(ctx, 0, ay, -1, spread, color);        // left wing
+  drawWing(ctx, 0, ay, 1, spread, color);         // right wing
 }
 
-// Animated feathered "eagle" wings — an original procedural pair that flaps
-// between two frames. Drawn behind the body, sweeping back (−x) and out.
-function drawEagleWings(ctx, shoulderY, frame, color) {
-  const dark = shade(color, -0.34), light = shade(color, 0.28);
-  const ax = -3, ay = shoulderY + 3;
-  const flap = frame === 0 ? -0.16 : 0.12;       // frame 0 = up-beat, frame 1 = down-beat
-  // far wing (behind, dimmer + slightly more raised) then near wing for depth
-  drawWingFan(ctx, ax - 1, ay - 1, flap - 0.06, 0.85, dark, shade(dark, -0.15), dark);
-  drawWingFan(ctx, ax, ay, flap, 1, color, dark, light);
-}
+// one wing for side = ±1 (mirrored), a soft membrane with layered feathers
+// fanning from straight-up out to the side
+function drawWing(ctx, ax, ay, side, spread, color) {
+  const dark = shade(color, -0.36), light = shade(color, 0.30);
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.scale(side, 1);
 
-// a fan of feathers forming one wing, pointing back (−x)
-function drawWingFan(ctx, x, y, flap, scale, color, edge, tip) {
-  const feathers = 6;
-  for (let i = 0; i < feathers; i++) {
-    const t = i / (feathers - 1);                 // 0 = inner/up, 1 = outer/down
-    const ang = Math.PI + (-0.95 + t * 1.55) + flap;
-    const len = (10 + Math.sin(t * Math.PI) * 9) * scale;   // longest mid-wing
-    const w = (5.2 + Math.sin(t * Math.PI) * 2.2) * scale;
-    drawFeather(ctx, x, y, ang, len, w, i % 2 ? color : tip, edge);
+  // membrane base for solidity
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(0, 1);
+  ctx.quadraticCurveTo(9 * spread, -11 * spread, 17 * spread, -3 * spread);
+  ctx.quadraticCurveTo(12, 6, 0, 5);
+  ctx.closePath(); ctx.fill();
+
+  // layered feathers: from up (top of wing) fanning out to the side
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);                          // 0 = top/inner, 1 = outer
+    const ang = -Math.PI / 2 + (0.28 + t * 1.05) * spread;
+    const len = 8 + Math.sin((t + 0.12) * Math.PI * 0.9) * 9;
+    const w = 4.4 + Math.sin(t * Math.PI) * 2.2;
+    drawFeather(ctx, 0, 0, ang, len, w, i % 2 ? color : light, dark);
   }
+  ctx.restore();
 }
 
 // one feather: a pointed shape from its base to a tip at distance `len`

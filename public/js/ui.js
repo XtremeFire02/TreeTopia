@@ -349,12 +349,21 @@ export class UI {
     $('declineTradeBtn').onclick = () => this.closeModals();
 
     const ci = $('chatInput');
+    const sendChat = (keepFocus) => {
+      const t = ci.value.trim();
+      if (t) this.net.send('chat', { text: t });
+      ci.value = '';
+      if (!keepFocus) { ci.blur(); setTyping(false); }
+    };
     ci.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') { const t = ci.value.trim(); if (t) this.net.send('chat', { text: t }); ci.value = ''; ci.blur(); setTyping(false); }
+      if (e.key === 'Enter') sendChat(false);
       else if (e.key === 'Escape') { ci.value = ''; ci.blur(); setTyping(false); }
     });
+    ci.addEventListener('focus', () => setTyping(true));   // mobile: tapping the box = chatting
     ci.addEventListener('blur', () => setTyping(false));
+    // explicit Send button — the reliable way to send on mobile (no Enter key)
+    $('chatSend').addEventListener('click', () => sendChat(true));
   }
 }
 
