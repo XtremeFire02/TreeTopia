@@ -233,3 +233,53 @@ input:focus, select:focus { border-color: var(--accent2); }
 .ptag { position: absolute; transform: translate(-50%, -100%); pointer-events: none; }
 .ptag .wbtn { pointer-events: auto; cursor: pointer; background: rgba(36,48,68,.96); border: 1px solid rgba(255,255,255,.25); border-radius: 7px; font-size: 14px; padding: 2px 6px; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
 .ptag .wbtn:hover { background: #3a4a66; }
+
+/* ============ mobile / touch controls ============ */
+/* stop the browser from panning / zooming when you drag to build */
+#canvas { touch-action: none; }
+
+#touchControls { position: absolute; inset: 0; z-index: 18; pointer-events: none; }
+#touchControls .tc-left, #touchControls .tc-right {
+  position: absolute; bottom: calc(96px + env(safe-area-inset-bottom));
+  display: flex; gap: 14px; align-items: flex-end;
+}
+#touchControls .tc-left { left: max(14px, env(safe-area-inset-left)); }
+#touchControls .tc-right { right: max(14px, env(safe-area-inset-right)); }
+.tc-btn {
+  pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: rgba(36,48,68,.6); color: #fff; font-size: 24px; font-weight: 700;
+  border: 1px solid rgba(255,255,255,.28); box-shadow: 0 3px 10px rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+}
+.tc-btn:active { background: rgba(90,168,58,.85); transform: scale(.96); }
+.tc-jump { width: 74px; height: 74px; font-size: 30px; }
+.tc-bg { width: 50px; height: 50px; font-size: 13px; border-radius: 14px; }
+.tc-bg.on { background: rgba(242,197,49,.9); color: #1b2330; border-color: var(--gold); }
+
+/* tweaks applied only when the device is touch-driven */
+body.touch #controls { display: none; }                 /* keyboard help is irrelevant */
+body.touch #canvas { cursor: default; }
+body.touch #chatBox { bottom: auto; top: 54px; left: 8px; width: min(58vw, 260px); }
+body.touch #chatLog { max-height: 96px; }
+body.touch #invDrawer { width: min(560px, 100vw); }
+
+/* ============ responsive layout (small screens) ============ */
+@media (max-width: 720px) {
+  .panel { padding: 26px 22px; }
+  .world-list { grid-template-columns: 1fr; max-height: 50vh; }
+  .trade-cols { flex-direction: column; }
+
+  #hud { height: auto; flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
+  .hud-left, .hud-right { gap: 6px; flex-wrap: wrap; }
+  .hud-btn { padding: 6px 9px; font-size: 13px; }
+  .chip { padding: 5px 9px; font-size: 12px; }
+
+  .slot { width: 46px; height: 46px; font-size: 22px; }
+  .slot .ic-img { width: 26px; height: 26px; }
+  #hotbar { gap: 5px; padding: 5px 8px 10px; }
+
+  .modal { padding: 16px; }
+  .item-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
+}

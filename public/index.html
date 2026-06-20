@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Growtopia Clone</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -96,6 +99,18 @@
     <div id="controls">
       ⬅➡ move · ⬆/Space jump (double-jump w/ Wings) · L-click punch · R-click place ·
       drag the notch ▲ for inventory · select 🔧 then click a player to inspect · R respawn
+    </div>
+
+    <!-- on-screen touch controls (shown only on touch devices) -->
+    <div id="touchControls" class="hidden">
+      <div class="tc-left">
+        <button class="tc-btn" data-dir="left" aria-label="Move left">◀</button>
+        <button class="tc-btn" data-dir="right" aria-label="Move right">▶</button>
+      </div>
+      <div class="tc-right">
+        <button class="tc-btn tc-bg" data-bg aria-label="Place into background layer">BG</button>
+        <button class="tc-btn tc-jump" data-jump aria-label="Jump">⬆</button>
+      </div>
     </div>
   </div>
 
