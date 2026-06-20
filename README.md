@@ -40,6 +40,15 @@ Follow `deploy/aws/README.md` or run `deploy/aws/provision-cloudshell.sh` from A
 CloudShell to create the EC2 instance, bootstrap Node/Nginx/systemd, and connect GitHub
 Actions so every push to `main` updates the live game.
 
+## Native apps (iOS, Android, Desktop)
+
+The same game can be shipped as installable apps: **iOS/Android** via Capacitor
+and **Windows/macOS/Linux** via Tauri. They wrap the `public/` client and connect
+to your live server over WebSocket. See **`docs/APPS.md`** for the full build
+guide. The one required step is setting your server URL in `public/js/config.js`
+(`SERVER_URL`) so the apps know where to connect — the browser build needs no
+change.
+
 ## Controls
 
 | Action | Keys |
