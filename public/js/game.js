@@ -635,15 +635,16 @@ function drawAvatar(ctx, H, eq, swing, anim) {
   // torso on the −x side (the side away from the face). This makes the facing
   // and the front/back hands unambiguous instead of a symmetric two-arm pose.
   drawLimb(ctx, -3, hipY, legLen, legW, -swing, shade(legColor, -0.14), shoeColor); // far leg
-  drawLimb(ctx, 2, shoulderY + 1, armLen - 1, armW, swing, shade(SKIN, -0.18), null); // far arm (behind torso)
+  drawLimb(ctx, 2, shoulderY + 1, armLen - 1, armW, -swing, shade(SKIN, -0.18), null); // far arm (opposite its leg)
 
   // torso
   ctx.fillStyle = torsoColor;
   roundRect(ctx, -torsoW / 2, torsoTop, torsoW, torsoH, 4); ctx.fill();
 
-  // near-side limbs (drawn over the torso)
+  // near-side limbs (drawn over the torso). Arms swing OPPOSITE to the leg on
+  // their own side (contralateral gait) so they don't move in lockstep.
   drawLimb(ctx, 3, hipY, legLen, legW, swing, legColor, shoeColor);              // near leg
-  if (anim !== 'punch') drawLimb(ctx, -5, shoulderY + 1, armLen, armW, -swing, SKIN, null); // near/front arm
+  if (anim !== 'punch') drawLimb(ctx, -5, shoulderY + 1, armLen, armW, swing, SKIN, null); // near/front arm
 
   if (eq.scarf) { ctx.fillStyle = col('scarf', '#d24a4a'); roundRect(ctx, -torsoW / 2 - 1, torsoTop - 2, torsoW + 2, 4, 2); ctx.fill(); }
 
