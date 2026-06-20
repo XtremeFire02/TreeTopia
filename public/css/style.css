@@ -307,6 +307,13 @@ body.touch #drawerNotch { padding: 6px 0 4px; }
 .dev-row { display: flex; align-items: center; justify-content: space-between; background: var(--panel2); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
 .dev-row span { color: #b8860b; font-weight: 800; }
 .dev-row button { font-size: 12px; padding: 4px 10px; }
+.devp-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; max-height: 38vh; overflow-y: auto; }
+.devp-row { background: var(--panel2); border-radius: 10px; padding: 8px 10px; }
+.devp-name { display: block; font-weight: 700; margin-bottom: 6px; }
+.devp-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.devp-acts .ghost-btn { font-size: 12px; padding: 5px 8px; }
+.ghost-btn.danger { color: #ff9a9a; border-color: rgba(210,74,74,.5); }
+.ghost-btn.danger:hover { background: rgba(210,74,74,.18); }
 
 /* ============ responsive layout (small screens) ============ */
 @media (max-width: 720px) {

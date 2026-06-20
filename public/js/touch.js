@@ -59,43 +59,52 @@ function bindHold(btn, key) {
   btn.addEventListener('pointerleave', up);
 }
 
-// A finger on the canvas aims and triggers building. Only one "build finger" is
-// tracked at a time so the other thumb can keep moving/jumping at the same time.
+// One finger on the canvas aims/builds; TWO fingers pinch to zoom. Other thumbs
+// on the movement/jump buttons aren't on the canvas, so they don't interfere.
 function wireWorldTaps(game) {
   const canvas = game.canvas;
+  const pts = new Map();   // active canvas pointerId -> {x, y}
   let buildId = null;
+  let pinchDist = 0;
 
-  const setPos = (e) => {
+  const local = (e) => {
     const r = canvas.getBoundingClientRect();
-    mouse.sx = e.clientX - r.left;
-    mouse.sy = e.clientY - r.top;
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  const clearBuild = () => { buildId = null; mouse.left = false; mouse.right = false; mouse.sx = -9999; mouse.sy = -9999; };
 
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse') return;  // desktop mouse uses its own handlers
-    if (buildId !== null) return;
     e.preventDefault();
+    const p = local(e); pts.set(e.pointerId, p);
+    if (pts.size >= 2) { clearBuild(); pinchDist = dist(); return; }  // start pinch
+    // single finger -> build / aim
     buildId = e.pointerId;
-    setPos(e);
+    mouse.sx = p.x; mouse.sy = p.y;
     const sel = game.selected;
-    // a placeable block places; everything else (fist, etc.) breaks. The wrench
-    // inspects via its own on-screen buttons, so it triggers no world action.
-    if (sel === 'wrench') return;
+    if (sel === 'wrench') return;                          // wrench uses its own buttons
     if (sel && isPlaceable(sel)) mouse.right = true;
     else mouse.left = true;
   });
 
   canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== buildId) return;
-    setPos(e);  // drag to keep breaking / re-aim toward the finger
+    if (!pts.has(e.pointerId)) return;
+    const p = local(e); pts.set(e.pointerId, p);
+    if (pts.size >= 2) {                                   // pinch -> zoom
+      const d = dist();
+      if (pinchDist > 0 && d > 0) game.zoomBy(d / pinchDist);
+      pinchDist = d;
+      return;
+    }
+    if (e.pointerId === buildId) { mouse.sx = p.x; mouse.sy = p.y; }
   });
 
   const end = (e) => {
-    if (e.pointerId !== buildId) return;
-    buildId = null;
-    mouse.left = false;
-    mouse.right = false;
-    mouse.sx = -9999; mouse.sy = -9999;  // park the cursor so no highlight lingers
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (e.pointerId === buildId) clearBuild();
+    if (pts.size < 2) pinchDist = 0;
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);

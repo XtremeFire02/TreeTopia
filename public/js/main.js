@@ -139,6 +139,12 @@ initInput(game.canvas, {
 // on-screen controls for phones / tablets (no-op on desktop)
 initTouch(game);
 
+// desktop: scroll wheel to zoom (touch uses pinch)
+game.canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  game.zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+}, { passive: false });
+
 // ---------- boot ----------
 (async function boot() {
   preloadPlayer();

@@ -24,6 +24,7 @@ export class Game {
 
     this.local = { x: 0, y: 0, vx: 0, vy: 0, dir: 1, onGround: false, anim: 'idle', walkT: 0, dead: false, deadAt: 0, jumpsUsed: 0, punchAt: 0, punchDir: 1, punchAngle: 0, punchDist: 0, punchSeq: 0 };
     this.camera = { x: 0, y: 0 };
+    this.zoom = 1;                 // pinch-to-zoom factor (1 = default)
     this.selected = null;          // item id chosen on hotbar for placing
     this.touchBgMode = false;      // mobile: place into the background layer (Shift on desktop)
     this.punchHeld = false;        // mobile: on-screen punch button held
@@ -292,7 +293,7 @@ export class Game {
     this.net.send('break', { x: tx, y: ty });
   }
   pointerTile() {
-    const wx = mouse.sx + this.camera.x, wy = mouse.sy + this.camera.y;
+    const wx = mouse.sx / this.zoom + this.camera.x, wy = mouse.sy / this.zoom + this.camera.y;
     const x = Math.floor(wx / TILE), y = Math.floor(wy / TILE);
     if (!this.world || x < 0 || y < 0 || x >= this.world.width || y >= this.world.height) return null;
     return { x, y };
@@ -347,33 +348,42 @@ export class Game {
     }
   }
 
+  setZoom(z) { this.zoom = clamp(z, 0.6, 3); }
+  zoomBy(factor) { this.setZoom(this.zoom * factor); }
+
   updateCamera(dt) {
     const w = this.world;
-    const targetX = this.local.x - this.canvas.width / 2;
-    const targetY = this.local.y - this.canvas.height / 2;
+    const vw = this.canvas.width / this.zoom, vh = this.canvas.height / this.zoom;
+    const targetX = this.local.x - vw / 2;
+    const targetY = this.local.y - vh / 2;
     this.camera.x += (targetX - this.camera.x) * Math.min(1, dt * 8);
     this.camera.y += (targetY - this.camera.y) * Math.min(1, dt * 8);
-    this.camera.x = clamp(this.camera.x, 0, w.width * TILE - this.canvas.width);
-    this.camera.y = clamp(this.camera.y, 0, w.height * TILE - this.canvas.height);
-    if (w.width * TILE < this.canvas.width) this.camera.x = (w.width * TILE - this.canvas.width) / 2;
-    if (w.height * TILE < this.canvas.height) this.camera.y = (w.height * TILE - this.canvas.height) / 2;
+    this.camera.x = clamp(this.camera.x, 0, w.width * TILE - vw);
+    this.camera.y = clamp(this.camera.y, 0, w.height * TILE - vh);
+    if (w.width * TILE < vw) this.camera.x = (w.width * TILE - vw) / 2;
+    if (w.height * TILE < vh) this.camera.y = (w.height * TILE - vh) / 2;
   }
 
   // ---------- rendering ----------
   render(now) {
     const ctx = this.ctx, w = this.world; if (!w) return;
     const cw = this.canvas.width, ch = this.canvas.height;
+    const z = this.zoom;
     const camX = this.camera.x, camY = this.camera.y;
 
-    // sky gradient
+    // sky gradient (drawn unscaled, fills the whole canvas)
     const g = ctx.createLinearGradient(0, 0, 0, ch);
     g.addColorStop(0, '#7fc7ef'); g.addColorStop(1, '#bfe3f5');
     ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
 
+    // everything below is drawn in world space, scaled by the zoom factor
+    ctx.save();
+    ctx.scale(z, z);
+
     const x0 = Math.max(0, Math.floor(camX / TILE));
     const y0 = Math.max(0, Math.floor(camY / TILE));
-    const x1 = Math.min(w.width - 1, Math.floor((camX + cw) / TILE));
-    const y1 = Math.min(w.height - 1, Math.floor((camY + ch) / TILE));
+    const x1 = Math.min(w.width - 1, Math.floor((camX + cw / z) / TILE));
+    const y1 = Math.min(w.height - 1, Math.floor((camY + ch / z) / TILE));
 
     // background tiles (dimmed)
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
@@ -457,8 +467,10 @@ export class Game {
       }
     }
 
+    ctx.restore();   // end scaled world space
+
     // DOM wrench buttons over players (only while the wrench is selected)
-    this.ui.updatePlayerTags([...this.others.values()], this.camera, this.selected === 'wrench');
+    this.ui.updatePlayerTags([...this.others.values()], this.camera, this.selected === 'wrench', z);
   }
 
   drawBubble(ctx, x, y, text) {

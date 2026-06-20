@@ -225,7 +225,7 @@ export class UI {
   }
 
   // ---------- player tag overlay (wrench buttons over players) ----------
-  updatePlayerTags(others, camera, active) {
+  updatePlayerTags(others, camera, active, zoom = 1) {
     const layer = $('playerTags');
     if (!active) { if (layer.childElementCount) { layer.innerHTML = ''; this._tagEls = {}; } return; }
     const seen = new Set();
@@ -238,8 +238,9 @@ export class UI {
         b.onclick = () => this.openProfile(o.id);
         el.appendChild(b); layer.appendChild(el); this._tagEls[o.id] = el;
       }
-      el.style.left = (o.x - camera.x + 26) + 'px';
-      el.style.top = (o.y - camera.y - 56) + 'px';
+      // world position -> screen pixels (account for the zoom transform)
+      el.style.left = ((o.x - camera.x) * zoom + 16) + 'px';
+      el.style.top = ((o.y - camera.y) * zoom - 26 * zoom) + 'px';
     }
     for (const id in this._tagEls) if (!seen.has(Number(id))) { this._tagEls[id].remove(); delete this._tagEls[id]; }
   }
@@ -344,8 +345,32 @@ export class UI {
   openDevPanel() {
     if (!this.game.me.dev) return;
     this.net.send('getDevelopers');
+    this.renderDevPlayers();
     this.openModal('devModal');
   }
+  // list of players in the world, each with the full set of dev actions
+  renderDevPlayers() {
+    const box = $('devPlayers'); if (!box) return;
+    box.innerHTML = '';
+    const others = this.game ? [...this.game.others.values()] : [];
+    if (!others.length) { box.innerHTML = '<div class="hint">No other players in this world.</div>'; return; }
+    for (const o of others) {
+      const row = document.createElement('div'); row.className = 'devp-row';
+      const nm = document.createElement('span');
+      nm.className = 'devp-name' + (o.dev ? ' dev-name' : '');
+      nm.textContent = (o.dev ? '@' : '') + o.name;
+      const acts = document.createElement('div'); acts.className = 'devp-acts';
+      const add = (label, fn) => { const b = document.createElement('button'); b.className = 'ghost-btn'; b.textContent = label; b.onclick = fn; acts.appendChild(b); };
+      add('🧲 Pull', () => this.devAct('pull', o.name));
+      add('🦵 Kick', () => this.devAct('kick', o.name));
+      add('⛔ Ban 30m', () => this.devAct('ban', o.name));
+      add('🚫 World Ban', () => this.devAct('worldban', o.name));
+      add('🔨 Game Ban', () => this.devAct('gameban', o.name));
+      add(o.dev ? '➖ Dev' : '➕ Dev', () => { this.net.send('setDeveloper', { name: o.name, grant: !o.dev }); });
+      row.appendChild(nm); row.appendChild(acts); box.appendChild(row);
+    }
+  }
+  devAct(cmd, name) { this.net.send('command', { cmd, arg: name }); }
   onDevList(list) {
     const box = $('devList'); if (!box) return;
     box.innerHTML = '';
@@ -368,6 +393,13 @@ export class UI {
     $('grantDevBtn').onclick = () => {
       const name = $('devNameInput').value.trim();
       if (name) { this.net.send('setDeveloper', { name, grant: true }); $('devNameInput').value = ''; }
+    };
+    $('delWorldBtn').onclick = () => {
+      const wn = this.game.world && this.game.world.name;
+      if (wn && window.confirm(`Delete world ${wn}? Everyone will be sent out and the world is wiped.`)) {
+        this.net.send('command', { cmd: 'deleteworld', arg: '' });
+        this.closeModals();
+      }
     };
     $('exitBtn').onclick = () => { this.game.stop(); this.net.send('leaveWorld'); document.dispatchEvent(new Event('backToWorlds')); };
 

@@ -200,10 +200,12 @@
     <!-- Developer tools (developers only) -->
     <div id="devModal" class="modal hidden">
       <div class="modal-head"><h3>⚙️ Developer Tools</h3><button class="close-x" data-close>✕</button></div>
-      <p>Grant developer status to a player by name. Developers get a yellow <b>@name</b> and infinite gems.</p>
+      <div class="subhead">Players in this world</div>
+      <div id="devPlayers" class="devp-list"></div>
+      <div class="subhead">Grant developer status</div>
       <div class="splice-row"><input id="devNameInput" maxlength="16" placeholder="Player name: letters/numbers only" /><button id="grantDevBtn" class="big-btn small">Grant Dev</button></div>
-      <div class="subhead">Current developers</div>
       <div id="devList" class="dev-list"></div>
+      <div class="row-right"><button id="delWorldBtn" class="ghost-btn danger">🗑️ Delete this world</button></div>
     </div>
 
     <!-- Trade request prompt -->
