@@ -3,6 +3,7 @@ import { Net } from './net.js';
 import { UI } from './ui.js';
 import { Game } from './game.js';
 import { initInput } from './input.js';
+import { initTouch } from './touch.js';
 import { preloadPlayer } from './assets.js';
 
 const $ = (id) => document.getElementById(id);
@@ -94,6 +95,9 @@ initInput(game.canvas, {
   },
   onEscape: () => ui.closeModals(),
 });
+
+// on-screen controls for phones / tablets (no-op on desktop)
+initTouch(game);
 
 // ---------- boot ----------
 (async function boot() {

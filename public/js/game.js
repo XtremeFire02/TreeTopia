@@ -25,6 +25,7 @@ export class Game {
     this.local = { x: 0, y: 0, vx: 0, vy: 0, dir: 1, onGround: false, anim: 'idle', walkT: 0, dead: false, deadAt: 0, jumpsUsed: 0, punchAt: 0, punchDir: 1, punchAngle: 0, punchDist: 0, punchSeq: 0 };
     this.camera = { x: 0, y: 0 };
     this.selected = null;          // item id chosen on hotbar for placing
+    this.touchBgMode = false;      // mobile: place into the background layer (Shift on desktop)
     this.running = false;
     this._lastMoveSend = 0;
     this._lastAction = 0;
@@ -257,7 +258,7 @@ export class Game {
       this.net.send('break', { x: t.x, y: t.y });
     } else if (mouse.right && this.selected && isPlaceable(this.selected) && now - this._lastAction > 200) {
       this._lastAction = now;
-      this.net.send('place', { x: t.x, y: t.y, itemId: this.selected, layer: keys['shift'] ? 1 : 0 });
+      this.net.send('place', { x: t.x, y: t.y, itemId: this.selected, layer: (keys['shift'] || this.touchBgMode) ? 1 : 0 });
     }
   }
   pointerTile() {
