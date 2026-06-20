@@ -682,7 +682,7 @@ function drawLimb(ctx, px, py, len, w, angle, color, shoeColor) {
 // to BOTH sides (the classic winged-back look). Animated: `frame` toggles the
 // spread so the wings flap. Drawn behind the body.
 function drawFeatheredWings(ctx, shoulderY, color, frame) {
-  const ay = shoulderY + 2;
+  const ay = shoulderY + 7;                        // mount on the torso, not the shoulders
   const spread = frame === 0 ? 1 : 0.82;          // flap: up-beat vs down-beat
   drawWing(ctx, 0, ay, -1, spread, color);        // left wing
   drawWing(ctx, 0, ay, 1, spread, color);         // right wing
