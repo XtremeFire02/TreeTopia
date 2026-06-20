@@ -194,23 +194,25 @@ input:focus, select:focus { border-color: var(--accent2); }
 .item-card .ic-img { width: 36px; height: 36px; }
 .trade-offer .ic-img, .add-item .ic-img { width: 20px; height: 20px; }
 
-/* drag-up inventory drawer */
+/* drag inventory drawer — height is driven continuously by JS (drag the notch).
+   At minimum height only the notch shows; dragging up reveals the hotbar, then
+   the full inventory below it (one connected scrolling panel). */
 #invDrawer {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: 0;
-  width: min(780px, 97vw); background: rgba(18,24,34,.94);
+  width: min(780px, 97vw); height: 94px; min-height: 24px; max-height: 88vh;
+  background: rgba(18,24,34,.94);
   border: 1px solid rgba(255,255,255,.08); border-bottom: none;
   border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,.45);
-  display: flex; flex-direction: column; z-index: 20;
+  display: flex; flex-direction: column; z-index: 20; overflow: hidden;
 }
-#drawerNotch { display: flex; justify-content: center; padding: 7px 0 5px; cursor: grab; touch-action: none; }
+#drawerNotch { flex: 0 0 auto; display: flex; justify-content: center; padding: 7px 0 5px; cursor: grab; touch-action: none; }
 #drawerNotch:active { cursor: grabbing; }
 .notch-bar { width: 64px; height: 6px; border-radius: 4px; background: rgba(255,255,255,.45); }
-#drawerBody { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 14px; }
-#invDrawer.expanded #drawerBody { max-height: 50vh; overflow-y: auto; padding: 4px 14px; }
-.drawer-title { margin: 2px 0 8px; }
+#drawerScroll { flex: 1 1 auto; overflow-y: auto; padding: 0 14px 10px; }
+.drawer-title { margin: 6px 0 8px; }
 #hotbar {
   position: static; transform: none; background: none; border: none;
-  display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 6px 10px 12px;
+  display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 2px 0 8px;
 }
 .slot.permanent { background: rgba(60,48,30,.9); }
 
@@ -240,7 +242,7 @@ input:focus, select:focus { border-color: var(--accent2); }
 
 #touchControls { position: absolute; inset: 0; z-index: 18; pointer-events: none; }
 #touchControls .tc-left, #touchControls .tc-right {
-  position: absolute; bottom: calc(16px + env(safe-area-inset-bottom));
+  position: absolute; bottom: calc(102px + env(safe-area-inset-bottom));
   display: flex; gap: 12px; align-items: flex-end;
 }
 #touchControls .tc-left { left: max(12px, env(safe-area-inset-left)); }
@@ -266,16 +268,8 @@ body.touch #canvas { cursor: default; }
 body.touch #chatBox { bottom: auto; top: 54px; left: 8px; width: min(58vw, 240px); }
 body.touch #chatLog { max-height: 84px; }
 
-/* inventory flush at the bottom: a slim centred handle + a single-row hotbar.
-   Drag the handle up/down to open/close the full inventory (no tapping). */
-body.touch #invDrawer { width: min(440px, 94vw); }
-body.touch #drawerNotch { padding: 5px 0 3px; }
-body.touch #hotbar {
-  flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
-  scrollbar-width: none; -webkit-overflow-scrolling: touch;
-}
-body.touch #hotbar::-webkit-scrollbar { display: none; }
-body.touch #hotbar .slot { flex: 0 0 auto; }
+body.touch #invDrawer { width: min(520px, 96vw); }
+body.touch #drawerNotch { padding: 6px 0 4px; }
 
 /* equipped clothing + developer tools */
 .item-card.worn { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }

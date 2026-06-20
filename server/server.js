@@ -196,7 +196,7 @@ function handle(p, msg) {
 
 // ---------- accounts / login / profiles ----------
 
-function loginSuccess(p, name) {
+function loginSuccess(p, name, extra = {}) {
   if ([...players.values()].some((pl) => pl !== p && pl.name === name)) {
     return toPlayer(p, 'authError', { text: 'That account is already logged in.' });
   }
@@ -214,24 +214,42 @@ function loginSuccess(p, name) {
     p.achievements = []; p.ownedWorlds = [];
     p.equipped = {};          // spawn naked — clothing is equipped from the inventory
   }
+  // migrate the old single 'body' outfit slot to the new 'shirt' slot
+  if (p.equipped.body && !p.equipped.shirt) p.equipped.shirt = p.equipped.body;
+  delete p.equipped.body;
   p.dev = isDeveloper(p);
   for (const t of PERMANENT) p.inventory[t] = 1;                 // always-present tools
   for (const c of STARTER_CLOTHING) if (!p.inventory[c]) p.inventory[c] = 1; // own your clothes
   saveProfile(p);
-  toPlayer(p, 'welcome', { id: p.id, name: p.name, dev: p.dev, gems: gemBalance(p), inventory: p.inventory, equipped: p.equipped });
+  toPlayer(p, 'welcome', { id: p.id, name: p.name, dev: p.dev, gems: gemBalance(p), inventory: p.inventory, equipped: p.equipped, ...extra });
   onGetWorlds(p);
 }
 
-function onJoin(p, msg) {            // guest login (no password)
-  const requestedName = String(msg.name || '').trim();
-  let name = 'Guest' + p.id;
-  if (requestedName) {
-    const result = validateAccountName(requestedName);
-    if (result.error) return toPlayer(p, 'authError', { text: result.error });
-    name = result.name;
+function onJoin(p, msg) {            // guest login — each guest is its own persistent account
+  // Returning guest: the client presents the name + token it saved last time.
+  if (msg.guestName && msg.guestToken) {
+    const name = canonicalAccountName(msg.guestName);
+    const acc = accounts[name];
+    if (acc && acc.guest && verifyPw(String(msg.guestToken), acc)) {
+      return loginSuccess(p, name);
+    }
+    // bad/expired token: fall through and mint a fresh guest below
   }
-  if (accounts[name]) return toPlayer(p, 'authError', { text: 'That name is registered. Please log in.' });
-  loginSuccess(p, name);
+  // New guest: mint a unique random name + secret token and persist the account.
+  const name = uniqueGuestName();
+  const token = crypto.randomBytes(18).toString('hex');
+  accounts[name] = { guest: true, ...hashPw(token) };
+  saveAccounts();
+  loginSuccess(p, name, { guestToken: token }); // client stores token to log back in
+}
+
+function uniqueGuestName() {
+  for (let i = 0; i < 2000; i++) {
+    const suffix = Math.random().toString(36).slice(2, 8).replace(/[^a-z0-9]/gi, '');
+    const name = ('Guest' + suffix).slice(0, 16);
+    if (name.length >= 3 && !accounts[name] && !isReservedDeveloperName(name)) return name;
+  }
+  return 'Guest' + Date.now().toString(36);
 }
 
 function onRegister(p, msg) {

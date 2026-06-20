@@ -30,6 +30,10 @@ function sendAuth(type, payload) {
 net.on('welcome', (m) => {
   game.me.id = m.id; game.me.name = m.name; game.me.gems = m.gems; game.me.inventory = m.inventory;
   game.me.dev = !!m.dev; game.me.equipped = m.equipped || {};
+  // a freshly-minted guest gets a token to log back into the same account later
+  if (m.guestToken) {
+    try { localStorage.setItem('tt_guestName', m.name); localStorage.setItem('tt_guestToken', m.guestToken); } catch { /* ignore */ }
+  }
   ui.onInventory();
   ui.onDevStatus();
   showScreen('worldSelect');
@@ -83,7 +87,16 @@ function creds() {
 }
 $('loginBtn').onclick = () => { const c = creds(); if (c.name) sendAuth('login', c); };
 $('registerBtn').onclick = () => { const c = creds(); if (c.name) sendAuth('register', c); };
-$('guestBtn').onclick = () => { const c = creds(); sendAuth('join', { name: c.name || 'Guest' }); };
+$('guestBtn').onclick = () => {
+  // reuse this device's saved guest account if it has one, else mint a new one
+  let guestCreds = {};
+  try {
+    const guestName = localStorage.getItem('tt_guestName');
+    const guestToken = localStorage.getItem('tt_guestToken');
+    if (guestName && guestToken) guestCreds = { guestName, guestToken };
+  } catch { /* localStorage may be unavailable */ }
+  sendAuth('join', guestCreds);
+};
 $('passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAuth('login', creds()); });
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('passInput').focus(); });
 

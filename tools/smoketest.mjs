@@ -40,8 +40,9 @@ const RID = Math.random().toString(36).slice(2, 7);
   const a = mkClient();
   await a.open();
 
-  // --- join (unique name => fresh starter profile each run) ---
-  a.send('join', { name: 'Tester' + RID });
+  // --- register a named account (guests now get random names, so use register
+  //     when a stable name is needed) => fresh starter profile each run ---
+  a.send('register', { name: 'Tester' + RID, password: 'testpass' });
   const welcome = await a.wait('welcome');
   ok(welcome.gems === 100, `welcome gems=100 (got ${welcome.gems})`);
   ok(welcome.inventory.dirt === 10, `starter dirt=10 (got ${welcome.inventory.dirt})`);
@@ -105,7 +106,7 @@ const RID = Math.random().toString(36).slice(2, 7);
   // --- second player cannot build inside the locked area ---
   const b = mkClient();
   await b.open();
-  b.send('join', { name: 'Intruder' + RID });
+  b.send('register', { name: 'Intruder' + RID, password: 'testpass' });
   await b.wait('welcome');
   await b.wait('worldList');
   b.send('enterWorld', { name: 'SMOKE' + RID });

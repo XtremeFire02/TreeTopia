@@ -78,22 +78,24 @@
     <!-- death overlay -->
     <div id="deathOverlay" class="overlay hidden"><div class="death-text">💀 You died!</div></div>
 
-    <!-- drag-up inventory drawer -->
-    <div id="invDrawer" class="collapsed">
-      <div id="drawerNotch" title="Drag up to open inventory"><span class="notch-bar"></span></div>
-      <div id="drawerBody">
-        <h4 class="drawer-title">🎒 Inventory</h4>
-        <div id="inventoryGrid" class="item-grid"></div>
-        <div class="splice-area">
-          <h4>🧬 Splice Seeds</h4>
-          <div class="splice-row">
-            <select id="spliceA"></select> + <select id="spliceB"></select>
-            <button id="spliceBtn" class="big-btn small">Splice</button>
+    <!-- drag inventory drawer: drag the notch up/down to any height -->
+    <div id="invDrawer">
+      <div id="drawerNotch" title="Drag up or down to resize"><span class="notch-bar"></span></div>
+      <div id="drawerScroll">
+        <div id="hotbar"></div>
+        <div id="drawerBody">
+          <h4 class="drawer-title">🎒 Inventory</h4>
+          <div id="inventoryGrid" class="item-grid"></div>
+          <div class="splice-area">
+            <h4>🧬 Splice Seeds</h4>
+            <div class="splice-row">
+              <select id="spliceA"></select> + <select id="spliceB"></select>
+              <button id="spliceBtn" class="big-btn small">Splice</button>
+            </div>
+            <p class="hint">Combine two seeds to discover new ones.</p>
           </div>
-          <p class="hint">Combine two seeds to discover new ones.</p>
         </div>
       </div>
-      <div id="hotbar"></div>
     </div>
 
     <!-- controls help -->

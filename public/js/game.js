@@ -6,10 +6,7 @@ import {
 import { ITEMS, isSolid, hasEffect, isPlaceable } from './shared/items.js';
 import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE } from './shared/names.js';
 import { keys, mouse } from './input.js';
-import { tileSprite, dropSprite, playerSprite } from './assets.js';
-
-const NAKED_BODY_COLOR = '#8a5a2b';   // flat brown body shown when no outfit is equipped
-function isClothed(equipped) { return !!(equipped && equipped.body); }
+import { tileSprite, dropSprite } from './assets.js';
 
 export class Game {
   constructor(net, ui) {
@@ -419,10 +416,10 @@ export class Game {
     }
 
     // other players
-    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, clothed: isClothed(o.equipped) });
+    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, equipped: o.equipped });
 
     // local player
-    const meOpts = { dev: this.me.dev, clothed: isClothed(this.me.equipped) };
+    const meOpts = { dev: this.me.dev, equipped: this.me.equipped };
     if (this.local.dead) {
       const k = (now - this.local.deadAt) / RESPAWN_MS;
       this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY - k * 40, this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k, 0, 0, 0, meOpts);
@@ -550,17 +547,16 @@ export class Game {
 
   drawCharacter(ctx, x, y, dir, anim, walkT, name, alpha = 1, deadK = 0, punchT = 0, punchAngle = 0, punchDist = 0, opts = {}) {
     const dev = !!opts.dev;
-    const clothed = !!opts.clothed;
+    const eq = opts.equipped || {};
     const H = TILE; // exactly one block tall
-    let frame = 'stand';
-    if (anim === 'dead' || anim === 'hurt') frame = 'hurt';
-    else if (anim === 'punch') frame = 'punchbody';
-    else if (anim === 'jump') frame = 'jump';
-    else if (anim === 'walk') frame = 'walk' + String((Math.floor(walkT) % 11) + 1).padStart(2, '0');
-    const sp = playerSprite(frame) || playerSprite('stand');
 
-    // the punching (back) arm is drawn FIRST so it sits BEHIND the body — the body
-    // stays exposed and the fist reaches out past it toward the target
+    // animation: legs/arms swing while walking, tuck on a jump
+    let swing = 0;
+    if (anim === 'walk') swing = Math.sin(walkT * 1.1) * 0.5;
+    else if (anim === 'jump') swing = 0.5;
+
+    // the punching arm is drawn FIRST (behind the body) in world space so its
+    // fist reaches out past the torso toward the target
     if (anim === 'punch') {
       ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y);
       drawPunchArm(ctx, H, punchT, punchAngle, punchDist);
@@ -572,20 +568,7 @@ export class Game {
     ctx.translate(x, y);
     if (anim === 'dead') ctx.rotate(deadK * 1.4);
     if (dir < 0) ctx.scale(-1, 1); // body faces the cursor side
-    if (sp) {
-      const scale = H / sp.naturalHeight; // body centred on source column x=10
-      const dx = -10 * scale, dw = sp.naturalWidth * scale;
-      ctx.drawImage(sp, dx, -H, dw, H);
-      if (!clothed) {
-        // "naked": recolor the whole body a flat brown (clothing is its own item)
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = NAKED_BODY_COLOR;
-        ctx.fillRect(dx, -H, dw, H);
-        ctx.globalCompositeOperation = 'source-over';
-      }
-    } else {
-      ctx.fillStyle = clothed ? '#5aa83a' : NAKED_BODY_COLOR; roundRect(ctx, -10, -H + 2, 20, H - 4, 5); ctx.fill();
-    }
+    drawAvatar(ctx, H, eq, swing, anim);
     ctx.restore();
 
     // name tag — developers show a yellow, @-prefixed name
@@ -603,6 +586,83 @@ export class Game {
       ctx.restore();
     }
   }
+}
+
+// ---------- procedural layered avatar ----------
+// Origin is at the feet (x = 0, y = 0), the figure extends up to y = -H, and
+// `dir` has already been applied (the figure faces +x). Each equipment slot is
+// drawn as its own layer over a plain-skin body, so "naked" is a real body and
+// any shirt / pants / scarf / shoes / wings / pet can be added independently.
+const SKIN = '#c0894f';   // bare-body colour (the "naked" look)
+
+function drawAvatar(ctx, H, eq, swing, anim) {
+  const hipY = -11, shoulderY = -21, headCY = -27, headR = 5.4;
+  const legLen = 11, legW = 5, armLen = 10, armW = 4;
+  const torsoTop = -22, torsoH = 12, torsoW = 13;
+
+  const col = (slot, fallback) => {
+    const it = eq[slot] && ITEMS[eq[slot]];
+    return (it && it.color) || fallback;
+  };
+  const legColor = col('pants', SKIN);
+  const torsoColor = col('shirt', SKIN);
+  const shoeColor = eq.shoes ? col('shoes', '#5a3a1a') : null;
+
+  if (eq.wings) drawWings(ctx, shoulderY, col('wings', '#eef2f8'));
+  if (eq.pet) drawPet(ctx, col('pet', '#7bc24a'));
+
+  // far-side limbs (slightly darker for depth), behind the torso
+  drawLimb(ctx, -3, hipY, legLen, legW, -swing, shade(legColor, -0.14), shoeColor);
+  drawLimb(ctx, -5, shoulderY + 1, armLen, armW, swing, shade(SKIN, -0.14), null);
+
+  // torso
+  ctx.fillStyle = torsoColor;
+  roundRect(ctx, -torsoW / 2, torsoTop, torsoW, torsoH, 4); ctx.fill();
+
+  // near-side limbs
+  drawLimb(ctx, 3, hipY, legLen, legW, swing, legColor, shoeColor);
+  if (anim !== 'punch') drawLimb(ctx, 5, shoulderY + 1, armLen, armW, -swing, SKIN, null);
+
+  if (eq.scarf) { ctx.fillStyle = col('scarf', '#d24a4a'); roundRect(ctx, -torsoW / 2 - 1, torsoTop - 2, torsoW + 2, 4, 2); ctx.fill(); }
+
+  // head + simple forward-facing face
+  ctx.fillStyle = SKIN;
+  ctx.beginPath(); ctx.arc(0, headCY, headR, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2b2b33';
+  ctx.beginPath(); ctx.arc(2.4, headCY - 0.8, 0.9, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(-0.3, headCY - 0.8, 0.9, 0, 7); ctx.fill();
+}
+
+// a rounded-rect limb that hangs from a pivot and rotates by `angle`
+function drawLimb(ctx, px, py, len, w, angle, color, shoeColor) {
+  ctx.save(); ctx.translate(px, py); ctx.rotate(angle);
+  ctx.fillStyle = color; roundRect(ctx, -w / 2, 0, w, len, w * 0.4); ctx.fill();
+  if (shoeColor) { ctx.fillStyle = shoeColor; roundRect(ctx, -w / 2 - 0.6, len - 2.4, w + 2, 3.4, 1.4); ctx.fill(); }
+  ctx.restore();
+}
+
+// wings sit BEHIND the body (drawn first) and sweep toward the back (−x),
+// since the figure faces +x
+function drawWings(ctx, shoulderY, color) {
+  const midY = shoulderY + 4;
+  ctx.fillStyle = color;
+  for (const dy of [-5, 3]) {        // two stacked feathers, both pointing back
+    ctx.beginPath();
+    ctx.moveTo(-1, midY);
+    ctx.quadraticCurveTo(-17, midY + dy - 4, -15, midY + dy + 5);
+    ctx.quadraticCurveTo(-9, midY + 4, -1, midY + 3);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle = shade(color, -0.2); ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(-2, midY); ctx.lineTo(-14, midY - 2); ctx.stroke();
+}
+
+function drawPet(ctx, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(-13, -6, 4.5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(-15.5, -9, 2.6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2b2b33';
+  ctx.beginPath(); ctx.arc(-16.4, -9.4, 0.7, 0, 7); ctx.fill();
 }
 
 // ---------- helpers ----------

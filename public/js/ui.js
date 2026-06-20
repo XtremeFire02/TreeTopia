@@ -263,22 +263,28 @@ export class UI {
   }
   focusChat() { setTyping(true); $('chatInput').focus(); }
 
-  // ---------- drawer drag (drag up/down only — tapping does nothing) ----------
+  // ---------- drawer drag (continuous height — drag the notch up/down) ----------
   wireDrawer() {
     const drawer = $('invDrawer'), notch = $('drawerNotch');
-    let startY = null;
-    notch.addEventListener('pointerdown', (e) => { startY = e.clientY; try { notch.setPointerCapture(e.pointerId); } catch {} });
-    notch.addEventListener('pointermove', (e) => {
-      if (startY == null) return;
-      const dy = startY - e.clientY;
-      if (dy > 24) drawer.classList.add('expanded');
-      else if (dy < -24) drawer.classList.remove('expanded');
+    const MIN = 24, maxH = () => Math.round(window.innerHeight * 0.85);
+    let startY = null, startH = 0;
+    const setH = (h) => { drawer.style.height = Math.max(MIN, Math.min(maxH(), h)) + 'px'; };
+    notch.addEventListener('pointerdown', (e) => {
+      startY = e.clientY; startH = drawer.getBoundingClientRect().height;
+      try { notch.setPointerCapture(e.pointerId); } catch {}
+      e.preventDefault();
     });
+    notch.addEventListener('pointermove', (e) => { if (startY != null) setH(startH + (startY - e.clientY)); });
     const end = () => { startY = null; };
     notch.addEventListener('pointerup', end);
     notch.addEventListener('pointercancel', end);
+    this._setDrawerHeight = setH;
   }
-  toggleDrawer() { $('invDrawer').classList.toggle('expanded'); }  // keyboard E shortcut (desktop)
+  // keyboard E (desktop): toggle between just-the-hotbar and a tall inventory
+  toggleDrawer() {
+    const h = $('invDrawer').getBoundingClientRect().height;
+    if (this._setDrawerHeight) this._setDrawerHeight(h > 140 ? 94 : Math.round(window.innerHeight * 0.6));
+  }
 
   // ---------- developer status / settings ----------
   onDevStatus() {

@@ -129,10 +129,21 @@ export const ITEMS = {
   fist: { id: 'fist', name: 'Fist', type: 'tool', icon: '✊', permanent: true },
   wrench: { id: 'wrench', name: 'Wrench', type: 'tool', icon: '🔧', permanent: true },
 
-  // ---- clothing (equip/unequip from the inventory; never placed in the world) ----
+  // ---- clothing / equipment (equip from the inventory; never placed) ----
+  // Each item names a `slot`; the avatar renders whatever is equipped per slot.
+  // `color` drives the procedural rendering. Add more items per class freely.
+  basic_shirt: {
+    id: 'basic_shirt', name: 'Cotton Shirt', type: 'clothing', slot: 'shirt',
+    icon: '👕', color: '#4f8be0',
+  },
+  basic_pants: {
+    id: 'basic_pants', name: 'Cotton Pants', type: 'clothing', slot: 'pants',
+    icon: '👖', color: '#3a4a66',
+  },
+  // legacy: kept so old saves that reference it still resolve (now a shirt)
   adventurer_outfit: {
-    id: 'adventurer_outfit', name: 'Adventurer Outfit', type: 'clothing',
-    icon: '👕', slot: 'body',
+    id: 'adventurer_outfit', name: 'Adventurer Shirt', type: 'clothing', slot: 'shirt',
+    icon: '🧥', color: '#8a5a2b',
   },
 
   // ---- equippable effect items (grant an effect while in your inventory) ----
@@ -226,7 +237,11 @@ export const PERMANENT = ['fist', 'wrench'];
 
 // Clothing every player starts owning (so they can dress themselves). They are
 // NOT auto-equipped — players spawn naked and equip from the inventory.
-export const STARTER_CLOTHING = ['adventurer_outfit'];
+export const STARTER_CLOTHING = ['basic_shirt', 'basic_pants'];
+
+// Equipment slots, drawn back-to-front in roughly this order by the avatar.
+// Add more clothing items that reference any of these slots at any time.
+export const EQUIP_SLOTS = ['wings', 'pet', 'shoes', 'pants', 'shirt', 'scarf'];
 
 // Is this an equippable clothing item?
 export function isClothing(id) {

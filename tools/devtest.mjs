@@ -34,20 +34,23 @@ try {
   let w = await D.wait('welcome');
   ok(w.dev === true, 'dev flag on welcome');
   ok(w.gems >= 9e15, 'dev infinite gems (' + w.gems + ')');
-  ok(!!w.inventory.adventurer_outfit, 'starts owning the outfit item');
-  ok(!w.equipped.body, 'spawns naked (no body equipped)');
+  ok(!!w.inventory.basic_shirt && !!w.inventory.basic_pants, 'starts owning shirt + pants');
+  ok(!w.equipped.shirt && !w.equipped.pants, 'spawns naked (nothing equipped)');
 
   D.send('enterWorld', { name: 'DEVWORLD' });
   await D.wait('worldData');
-  D.send('equip', { itemId: 'adventurer_outfit' });
+  D.send('equip', { itemId: 'basic_shirt' });
   let inv = await D.wait('inventory');
-  ok(inv.equipped.body === 'adventurer_outfit', 'equip outfit -> body slot set');
-  D.send('equip', { itemId: 'adventurer_outfit' });
+  ok(inv.equipped.shirt === 'basic_shirt', 'equip shirt -> shirt slot set');
+  D.send('equip', { itemId: 'basic_pants' });
   inv = await D.wait('inventory');
-  ok(!inv.equipped.body, 'double toggle -> unequipped');
+  ok(inv.equipped.pants === 'basic_pants', 'pants go in their own slot');
+  D.send('equip', { itemId: 'basic_shirt' });
+  inv = await D.wait('inventory');
+  ok(!inv.equipped.shirt && inv.equipped.pants === 'basic_pants', 'double-tap shirt unequips only the shirt');
 
   const N = await client();
-  N.send('join', { name: 'Bob' });
+  N.send('register', { name: 'Bob', password: 'bobpass' });
   const bw = await N.wait('welcome');
   ok(bw.dev === false, 'Bob not a dev initially');
   D.send('setDeveloper', { name: 'Bob', grant: true });
@@ -60,6 +63,25 @@ try {
   ok(bs2.dev === false, 'Bob dev removed');
   const bgem2 = await N.wait('inventory');
   ok(bgem2.gems < 9e15, 'Bob gems revert to real value (' + bgem2.gems + ')');
+
+  // guest accounts: each guest is its own persistent random account + token
+  const G1 = await client();
+  G1.send('join', {});
+  const g1 = await G1.wait('welcome');
+  ok(/^Guest/i.test(g1.name) && !!g1.guestToken, 'new guest gets a random name + token');
+  const gName = g1.name, gToken = g1.guestToken;
+  const G2 = await client();
+  G2.send('join', {});
+  const g2 = await G2.wait('welcome');
+  ok(g2.name !== g1.name, 'a second guest gets a different account');
+  const G3 = await client();
+  G3.send('join', { guestName: gName, guestToken: gToken });
+  const r3 = await Promise.race([G3.wait('welcome'), G3.wait('authError')]);
+  ok(r3.text === 'That account is already logged in.', 'valid token resolves to the same (still-online) guest account');
+  const G4 = await client();
+  G4.send('join', { guestName: gName, guestToken: 'wrongtoken' });
+  const g4 = await G4.wait('welcome');
+  ok(g4.name !== gName, 'a bad guest token mints a fresh account instead');
 
   // world-lock: only one allowed per world (use the dev account for gems)
   D.send('buy', { itemId: 'world_lock', qty: 2 }); await D.wait('inventory');
