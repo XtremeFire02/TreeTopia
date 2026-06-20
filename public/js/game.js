@@ -608,7 +608,15 @@ function drawAvatar(ctx, H, eq, swing, anim) {
   const torsoColor = col('shirt', SKIN);
   const shoeColor = eq.shoes ? col('shoes', '#5a3a1a') : null;
 
-  if (eq.wings) drawWings(ctx, shoulderY, col('wings', '#eef2f8'));
+  if (eq.wings) {
+    const wIt = ITEMS[eq.wings];
+    if (wIt && wIt.render === 'eagle') {
+      const frame = Math.floor(performance.now() / (wIt.frameMs || 500)) % (wIt.frames || 2);
+      drawEagleWings(ctx, shoulderY, frame, wIt.color || '#c01622');
+    } else {
+      drawWings(ctx, shoulderY, col('wings', '#eef2f8'));
+    }
+  }
   if (eq.pet) drawPet(ctx, col('pet', '#7bc24a'));
 
   // far-side limbs (slightly darker for depth), behind the torso
@@ -655,6 +663,41 @@ function drawWings(ctx, shoulderY, color) {
   }
   ctx.strokeStyle = shade(color, -0.2); ctx.lineWidth = 0.6;
   ctx.beginPath(); ctx.moveTo(-2, midY); ctx.lineTo(-14, midY - 2); ctx.stroke();
+}
+
+// Animated feathered "eagle" wings — an original procedural pair that flaps
+// between two frames. Drawn behind the body, sweeping back (−x) and out.
+function drawEagleWings(ctx, shoulderY, frame, color) {
+  const dark = shade(color, -0.34), light = shade(color, 0.28);
+  const ax = -3, ay = shoulderY + 3;
+  const flap = frame === 0 ? -0.16 : 0.12;       // frame 0 = up-beat, frame 1 = down-beat
+  // far wing (behind, dimmer + slightly more raised) then near wing for depth
+  drawWingFan(ctx, ax - 1, ay - 1, flap - 0.06, 0.85, dark, shade(dark, -0.15), dark);
+  drawWingFan(ctx, ax, ay, flap, 1, color, dark, light);
+}
+
+// a fan of feathers forming one wing, pointing back (−x)
+function drawWingFan(ctx, x, y, flap, scale, color, edge, tip) {
+  const feathers = 6;
+  for (let i = 0; i < feathers; i++) {
+    const t = i / (feathers - 1);                 // 0 = inner/up, 1 = outer/down
+    const ang = Math.PI + (-0.95 + t * 1.55) + flap;
+    const len = (10 + Math.sin(t * Math.PI) * 9) * scale;   // longest mid-wing
+    const w = (5.2 + Math.sin(t * Math.PI) * 2.2) * scale;
+    drawFeather(ctx, x, y, ang, len, w, i % 2 ? color : tip, edge);
+  }
+}
+
+// one feather: a pointed shape from its base to a tip at distance `len`
+function drawFeather(ctx, x, y, angle, len, w, color, edge) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+  ctx.fillStyle = color; ctx.strokeStyle = edge; ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(len * 0.55, -w / 2, len, 0);
+  ctx.quadraticCurveTo(len * 0.55, w / 2, 0, 0);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
 }
 
 function drawPet(ctx, color) {

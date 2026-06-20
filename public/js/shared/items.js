@@ -145,6 +145,12 @@ export const ITEMS = {
     id: 'adventurer_outfit', name: 'Adventurer Shirt', type: 'clothing', slot: 'shirt',
     icon: '🧥', color: '#8a5a2b',
   },
+  // animated wings: `render: 'eagle'` + a 2-frame flap toggled every frameMs
+  crimson_eagle_wings: {
+    id: 'crimson_eagle_wings', name: 'Crimson Eagle Wings', type: 'clothing', slot: 'wings',
+    icon: '🦅', color: '#c01622', render: 'eagle', frames: 2, frameMs: 500,
+    price: 2500, category: 'Wings',
+  },
 
   // ---- equippable effect items (grant an effect while in your inventory) ----
   wings: { id: 'wings', name: 'Angel Wings', type: 'effect', icon: '🪽', effect: 'double_jump', price: 800 },
