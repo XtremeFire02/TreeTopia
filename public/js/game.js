@@ -618,18 +618,20 @@ function drawAvatar(ctx, H, eq, swing, anim) {
   }
   if (eq.pet) drawPet(ctx, col('pet', '#7bc24a'));
 
-  // far-side limbs (slightly darker for depth), behind the torso. The back arm
-  // sits on the +x (front-facing) side, the front arm on −x — see near limbs.
-  drawLimb(ctx, -3, hipY, legLen, legW, -swing, shade(legColor, -0.14), shoeColor);
-  drawLimb(ctx, 5, shoulderY + 1, armLen, armW, swing, shade(SKIN, -0.14), null);
+  // SIDE PROFILE (figure faces +x, nose on +x): the far arm is tucked behind
+  // the torso (near centre, barely visible), the near arm is drawn over the
+  // torso on the −x side (the side away from the face). This makes the facing
+  // and the front/back hands unambiguous instead of a symmetric two-arm pose.
+  drawLimb(ctx, -3, hipY, legLen, legW, -swing, shade(legColor, -0.14), shoeColor); // far leg
+  drawLimb(ctx, 2, shoulderY + 1, armLen - 1, armW, swing, shade(SKIN, -0.18), null); // far arm (behind torso)
 
   // torso
   ctx.fillStyle = torsoColor;
   roundRect(ctx, -torsoW / 2, torsoTop, torsoW, torsoH, 4); ctx.fill();
 
-  // near-side limbs (front arm drawn over the torso, on the −x side)
-  drawLimb(ctx, 3, hipY, legLen, legW, swing, legColor, shoeColor);
-  if (anim !== 'punch') drawLimb(ctx, -5, shoulderY + 1, armLen, armW, -swing, SKIN, null);
+  // near-side limbs (drawn over the torso)
+  drawLimb(ctx, 3, hipY, legLen, legW, swing, legColor, shoeColor);              // near leg
+  if (anim !== 'punch') drawLimb(ctx, -5, shoulderY + 1, armLen, armW, -swing, SKIN, null); // near/front arm
 
   if (eq.scarf) { ctx.fillStyle = col('scarf', '#d24a4a'); roundRect(ctx, -torsoW / 2 - 1, torsoTop - 2, torsoW + 2, 4, 2); ctx.fill(); }
 
