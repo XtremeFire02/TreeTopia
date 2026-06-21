@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-const URL = 'ws://localhost:3000';
+const URL = process.env.TEST_WS_URL || 'ws://localhost:3000';
 const ok = (c, m) => console.log((c ? 'PASS' : 'FAIL') + ' ' + m);
 // wait for an 'inventory' message satisfying pred, skipping stale ones in flight
 async function waitInv(c, pred, tries = 8) {

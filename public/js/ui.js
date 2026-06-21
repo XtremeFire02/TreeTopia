@@ -26,9 +26,9 @@ export class UI {
   // ---------- icon helper (sprite <img> or emoji) ----------
   icon(id) {
     const url = iconUrl(id);
-    if (url) return `<img class="ic-img" src="${url}" alt="" draggable="false">`;
+    if (url) return `<img class="ic-img" src="${escapeHtml(url)}" alt="" draggable="false">`;
     const e = ITEMS[id] && ITEMS[id].icon;
-    return `<span class="ic-emoji">${e || '❔'}</span>`;
+    return `<span class="ic-emoji">${escapeHtml(e || '❔')}</span>`;
   }
 
   // ---------- helpers ----------
@@ -122,7 +122,7 @@ export class UI {
       const card = document.createElement('div');
       card.className = 'item-card' + (this.game.selected === id ? ' active' : '') + (worn ? ' worn' : '');
       const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'double-tap') : 'x' + inv[id]);
-      card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${it.name}</div><div class="ct">${tag}</div>`;
+      card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${escapeHtml(it.name)}</div><div class="ct">${escapeHtml(tag)}</div>`;
       if (clothing) {
         // double-tap (here in the inventory only) equips / unequips clothing
         onDoubleTap(card, () => this.net.send('equip', { itemId: id }));
@@ -155,7 +155,7 @@ export class UI {
         const contents = Object.entries(pack.items).map(([id, n]) => `${n}× ${ITEMS[id]?.name || id}`).join(', ');
         const card = document.createElement('div'); card.className = 'item-card pack-card';
         card.title = contents;
-        card.innerHTML = `<div class="ic">📦</div><div class="nm">${pack.name}</div><div class="pr">${pack.price} 💎</div><div class="cat">${contents}</div>`;
+        card.innerHTML = `<div class="ic">📦</div><div class="nm">${escapeHtml(pack.name)}</div><div class="pr">${pack.price} 💎</div><div class="cat">${escapeHtml(contents)}</div>`;
         card.onclick = () => this.net.send('buyPack', { packId: pack.id });
         grid.appendChild(card);
       }
@@ -169,7 +169,7 @@ export class UI {
       grid.appendChild(this._shopHeader('🎨 Custom Items'));
       for (const it of customs) {
         const card = document.createElement('div'); card.className = 'item-card';
-        card.innerHTML = `<div class="ic">${this.icon(it.id)}</div><div class="nm">${it.name}</div><div class="pr">${it.price} 💎</div>`;
+        card.innerHTML = `<div class="ic">${this.icon(it.id)}</div><div class="nm">${escapeHtml(it.name)}</div><div class="pr">${it.price} 💎</div>`;
         card.onclick = () => this.net.send('buy', { itemId: it.id, qty: 1 });
         grid.appendChild(card);
       }
@@ -181,7 +181,7 @@ export class UI {
       grid.appendChild(this._shopHeader('✨ Rare Items'));
       for (const it of rares) {
         const card = document.createElement('div'); card.className = 'item-card';
-        card.innerHTML = `<div class="ic">${this.icon(it.id)}</div><div class="nm">${it.name}</div><div class="pr">${it.price} 💎</div>`;
+        card.innerHTML = `<div class="ic">${this.icon(it.id)}</div><div class="nm">${escapeHtml(it.name)}</div><div class="pr">${it.price} 💎</div>`;
         card.onclick = () => this.net.send('buy', { itemId: it.id, qty: 1 });
         grid.appendChild(card);
       }
@@ -195,7 +195,7 @@ export class UI {
         grid.appendChild(this._shopHeader('🔎 More Items'));
         for (const s of extra) {
           const card = document.createElement('div'); card.className = 'item-card';
-          card.innerHTML = `<div class="ic">${this.icon(s.id)}</div><div class="nm">${s.name}</div><div class="pr">${s.price} 💎</div>`;
+          card.innerHTML = `<div class="ic">${this.icon(s.id)}</div><div class="nm">${escapeHtml(s.name)}</div><div class="pr">${s.price} 💎</div>`;
           card.onclick = () => this.net.send('buy', { itemId: s.id, qty: 1 });
           grid.appendChild(card);
         }
@@ -335,7 +335,7 @@ export class UI {
     const your = $('yourOffer'); your.innerHTML = '';
     for (const [id, c] of Object.entries(m.yourItems)) {
       const d = document.createElement('div'); d.className = 'ti';
-      d.innerHTML = `${this.icon(id)} ${ITEMS[id]?.name || id} x${c}`;
+      d.innerHTML = `${this.icon(id)} ${escapeHtml(ITEMS[id]?.name || id)} x${c}`;
       d.title = 'Click to remove';
       d.onclick = () => { delete this.myTradeItems[id]; this.sendOffer(); };
       your.appendChild(d);
@@ -343,7 +343,7 @@ export class UI {
     const their = $('theirOffer'); their.innerHTML = '';
     for (const [id, c] of Object.entries(m.theirItems)) {
       const d = document.createElement('div'); d.className = 'ti';
-      d.innerHTML = `${this.icon(id)} ${ITEMS[id]?.name || id} x${c}`;
+      d.innerHTML = `${this.icon(id)} ${escapeHtml(ITEMS[id]?.name || id)} x${c}`;
       their.appendChild(d);
     }
     $('theirTradeGems').textContent = formatGems(m.theirGems);

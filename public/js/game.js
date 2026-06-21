@@ -99,12 +99,18 @@ export class Game {
   onTileUpdate(m) {
     const w = this.world; if (!w) return;
     const i = m.y * w.width + m.x;
+    const oldOwner = w.owner || null;
     if (m.fg !== undefined) w.fg[i] = m.fg;
     if (m.bg !== undefined) w.bg[i] = m.bg;
     if (m.data !== undefined) { if (m.data === null) delete w.data[i]; else w.data[i] = m.data; }
-    // keep the local world owner in sync when a World Lock is placed/removed
-    if (m.data && m.data.lock && m.data.lock.scope === 'world') w.owner = m.data.lock.owner;
-    else if (m.fg === '' && w.fg[i] === '' && m.data === null) { /* a tile cleared; owner re-derived on next enter */ }
+    // Keep local world ownership in sync when a World Lock is placed/removed.
+    if (m.owner !== undefined) w.owner = m.owner;
+    if (m.admins !== undefined) w.admins = m.admins || [];
+    if (m.data && m.data.lock && m.data.lock.scope === 'world') {
+      w.owner = m.data.lock.owner;
+      w.admins = m.data.lock.admins || [];
+    }
+    if ((w.owner || null) !== oldOwner && this.ui) this.ui.onEnterWorld(w, !!m.ownerDev);
     this.breakFx.delete(m.x + ',' + m.y);
     if (m.fg === '') this.spawnPoof(m.x * TILE + TILE / 2, m.y * TILE + TILE / 2);
   }

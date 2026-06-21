@@ -58,6 +58,7 @@ const DEV_ACCOUNTS = new Set([DEV_ACCOUNT_NAME.toLowerCase()]);
 const DEV_GEM_BALANCE = Number.MAX_SAFE_INTEGER;
 const REGULAR_NAME_RE = /^[A-Za-z0-9]{3,16}$/;
 const USERNAME_RULE_TEXT = 'Names must be 3-16 letters or numbers only. No spaces or special characters.';
+const AUTH_MESSAGES = new Set(['join', 'register', 'login']);
 
 fs.mkdirSync(WORLDS_DIR, { recursive: true });
 
@@ -265,6 +266,14 @@ function canonicalAccountName(name) {
   const clean = String(name || '').trim();
   return isReservedDeveloperName(clean) ? DEV_ACCOUNT_NAME : clean;
 }
+function accountKeyFor(name) {
+  const lower = normalizeAccountName(name);
+  if (!lower) return null;
+  return Object.keys(accounts).find((key) => normalizeAccountName(key) === lower) || null;
+}
+function canonicalExistingAccountName(name) {
+  return accountKeyFor(name) || canonicalAccountName(name);
+}
 function validateAccountName(name, { allowDeveloper = false, allowEmpty = false } = {}) {
   const clean = canonicalAccountName(name);
   if (!clean) return { name: clean, error: allowEmpty ? null : USERNAME_RULE_TEXT };
@@ -305,6 +314,12 @@ function offerGems(p, value) {
 
 // ---------- message router ----------
 function handle(p, msg) {
+  if (AUTH_MESSAGES.has(msg.type)) {
+    if (p.name) return toPlayer(p, 'authError', { text: 'You are already logged in.' });
+  } else if (!p.name) {
+    return;
+  }
+
   switch (msg.type) {
     case 'join':        return onJoin(p, msg);
     case 'register':    return onRegister(p, msg);
@@ -380,7 +395,7 @@ function loginSuccess(p, name, extra = {}) {
 function onJoin(p, msg) {            // guest login — each guest is its own persistent account
   // Returning guest: the client presents the name + token it saved last time.
   if (msg.guestName && msg.guestToken) {
-    const name = canonicalAccountName(msg.guestName);
+    const name = canonicalExistingAccountName(msg.guestName);
     const acc = accounts[name];
     if (acc && acc.guest && verifyPw(String(msg.guestToken), acc)) {
       return loginSuccess(p, name);
@@ -408,7 +423,7 @@ function onRegister(p, msg) {
   const { name, error } = validateAccountName(msg.name);
   if (error) return toPlayer(p, 'authError', { text: error });
   if (String(msg.password || '').length < 4) return toPlayer(p, 'authError', { text: 'Password needs 4+ characters.' });
-  if (accounts[name]) return toPlayer(p, 'authError', { text: 'That name is already taken.' });
+  if (accountKeyFor(name)) return toPlayer(p, 'authError', { text: 'That name is already taken.' });
   accounts[name] = hashPw(String(msg.password));
   saveAccounts();
   loginSuccess(p, name);
@@ -420,11 +435,12 @@ function onLogin(p, msg) {
   if (isReservedDeveloperName(name) && !accounts[DEV_ACCOUNT_NAME]) {
     return toPlayer(p, 'authError', { text: 'The @XtremeFire developer account has not been created on this server yet.' });
   }
-  const acc = accounts[name];
+  const actualName = canonicalExistingAccountName(name);
+  const acc = accounts[actualName];
   if (!acc || !verifyPw(String(msg.password || ''), acc)) {
     return toPlayer(p, 'authError', { text: 'Wrong name or password.' });
   }
-  loginSuccess(p, name);
+  loginSuccess(p, actualName);
 }
 
 function onGetProfile(p, msg) {
@@ -433,7 +449,7 @@ function onGetProfile(p, msg) {
   if (!name && msg.name) {
     const result = validateAccountName(msg.name, { allowDeveloper: true });
     if (result.error) return;
-    name = result.name;
+    name = canonicalExistingAccountName(result.name);
   }
   if (!name) return;
   const online = [...players.values()].find((pl) => pl.name === name);
@@ -450,7 +466,7 @@ function onGetProfile(p, msg) {
     achievements: (prof.achievements || []).map((id) => ACHIEVEMENTS[id] || id),
     ownedWorlds: prof.ownedWorlds || [],
     effects,
-    isSelf: name === p.name,
+    isSelf: normalizeAccountName(name) === normalizeAccountName(p.name),
     added, friend: mutual,
     // last login is only revealed to mutual friends
     lastSeen: mutual ? lastSeenOf(name) : null,
@@ -461,16 +477,22 @@ function onGetProfile(p, msg) {
 // ---------- friends ----------
 // Friendship is mutual: you're "friends" once both players have added each
 // other (so warping into someone's world always has their consent).
-function findOnline(name) { return [...players.values()].find((pl) => pl.name === name) || null; }
+function findOnline(name) {
+  const lower = normalizeAccountName(name);
+  return [...players.values()].find((pl) => pl.name && normalizeAccountName(pl.name) === lower) || null;
+}
 function friendsOf(name) { const on = findOnline(name); return (on ? on.friends : (profiles[name] && profiles[name].friends)) || []; }
 function areMutual(a, b) { return friendsOf(a).includes(b) && friendsOf(b).includes(a); }
 function lastSeenOf(name) { const on = findOnline(name); if (on) return Date.now(); return (profiles[name] && profiles[name].lastSeen) || null; }
-function accountExists(name) { return !!accounts[name]; }
+function accountExists(name) { return !!accountKeyFor(name); }
 
 // resolve the target account name from {id} (online player) or {name}
 function resolveTargetName(msg) {
   if (msg.id != null) { const t = players.get(msg.id); if (t && t.name) return t.name; }
-  if (msg.name) { const r = validateAccountName(msg.name, { allowDeveloper: true }); if (!r.error) return r.name; }
+  if (msg.name) {
+    const r = validateAccountName(msg.name, { allowDeveloper: true });
+    if (!r.error) return canonicalExistingAccountName(r.name);
+  }
   return null;
 }
 
@@ -494,7 +516,7 @@ function onAddFriend(p, msg) {
   if (!p.name) return;
   const target = resolveTargetName(msg);
   if (!target) return toPlayer(p, 'notify', { text: 'Could not find that player.' });
-  if (target === p.name) return toPlayer(p, 'notify', { text: "You can't add yourself." });
+  if (normalizeAccountName(target) === normalizeAccountName(p.name)) return toPlayer(p, 'notify', { text: "You can't add yourself." });
   if (!accountExists(target)) return toPlayer(p, 'notify', { text: 'No such player.' });
   p.friends = p.friends || [];
   if (p.friends.includes(target)) return toPlayer(p, 'notify', { text: `${target} is already on your friends list.` });
@@ -688,7 +710,10 @@ function onBreak(p, msg) {
   if (def.type === 'lock') {
     const d = w.data[i];
     const lockOwner = d && d.lock ? d.lock.owner : null;
-    const allowed = isDeveloper(p) || (d && d.lock && (lockOwner === p.name || d.lock.admins.includes(p.name)));
+    const allowed = isDeveloper(p) || (d && d.lock && (
+      normalizeAccountName(lockOwner) === normalizeAccountName(p.name) ||
+      (d.lock.admins || []).some((admin) => normalizeAccountName(admin) === normalizeAccountName(p.name))
+    ));
     if (!allowed) {
       return toPlayer(p, 'notify', { text: 'Only the lock owner (or a developer) can remove it.' });
     }
@@ -698,6 +723,7 @@ function onBreak(p, msg) {
     lb.hits++; lb.last = tNow; w.breaking[i] = lb;
     broadcast(p.world, 'breakProgress', { x, y, hits: lb.hits, hardness: def.hardness });
     if (lb.hits >= def.hardness) {
+      const worldLockRemoved = d.lock.scope === 'world';
       if (d.lock.scope === 'world') {
         w.owner = null; w.admins = [];
         removeOwnedWorld(lockOwner, w.name);
@@ -705,7 +731,10 @@ function onBreak(p, msg) {
       grant(p, fg, 1);
       w.clearTile(x, y);
       delete w.data[i];                  // free the locked area (clearTile keeps lock data)
-      broadcast(p.world, 'tileUpdate', { x, y, fg: '', data: null });
+      broadcast(p.world, 'tileUpdate', {
+        x, y, fg: '', data: null,
+        ...(worldLockRemoved ? { owner: w.owner, admins: w.admins, ownerDev: false } : {}),
+      });
       sendInventory(p);
       scheduleSave(p.world);
     }
@@ -755,7 +784,10 @@ function onPlace(p, msg) {
       return toPlayer(p, 'notify', { text: w.owner ? 'This world already has a World Lock.' : 'Cannot place a lock here.' });
     }
     take(p, itemId, 1);
-    broadcast(p.world, 'tileUpdate', { x, y, fg: itemId, data: w.data[i] });
+    broadcast(p.world, 'tileUpdate', {
+      x, y, fg: itemId, data: w.data[i],
+      ...(def.lock.scope === 'world' ? { owner: w.owner, admins: w.admins, ownerDev: isDeveloperName(w.owner) } : {}),
+    });
     sendInventory(p);
     if (def.lock.scope === 'world') {
       if (!p.ownedWorlds) p.ownedWorlds = [];
@@ -901,7 +933,8 @@ function onSetDeveloper(p, msg) {
   const { name, error } = validateAccountName(msg.name, { allowDeveloper: true });
   if (error) return toPlayer(p, 'notify', { text: error });
   if (isReservedDeveloperName(name)) return toPlayer(p, 'notify', { text: 'The founder developer account cannot be changed.' });
-  const lower = normalizeAccountName(name);
+  const actualName = canonicalExistingAccountName(name);
+  const lower = normalizeAccountName(actualName);
   const grant = !!msg.grant;
   if (grant) developers.add(lower); else developers.delete(lower);
   saveDevelopers();
@@ -916,7 +949,7 @@ function onSetDeveloper(p, msg) {
     if (target.world) broadcast(target.world, 'playerMove', publicPlayer(target), target.id);
     toPlayer(target, 'notify', { text: grant ? '👑 You are now a developer!' : 'Your developer status was removed.' });
   }
-  toPlayer(p, 'notify', { text: `${grant ? 'Granted' : 'Removed'} developer for ${name}.` });
+  toPlayer(p, 'notify', { text: `${grant ? 'Granted' : 'Removed'} developer for ${actualName}.` });
   toPlayer(p, 'devList', { developers: [...developers] });
 }
 
@@ -928,23 +961,25 @@ function onGetDevelopers(p) {
 // Remove a world from its owner's profile (works whether they're online or not).
 function removeOwnedWorld(name, worldName) {
   if (!name) return;
-  const online = [...players.values()].find((pl) => pl.name === name);
+  const actualName = canonicalExistingAccountName(name);
+  const online = findOnline(actualName);
   if (online) {
     online.ownedWorlds = (online.ownedWorlds || []).filter((n) => n !== worldName);
     saveProfile(online);
-  } else if (profiles[name]) {
-    profiles[name].ownedWorlds = (profiles[name].ownedWorlds || []).filter((n) => n !== worldName);
+  } else if (profiles[actualName]) {
+    profiles[actualName].ownedWorlds = (profiles[actualName].ownedWorlds || []).filter((n) => n !== worldName);
   }
 }
 
 // ---------- admins ----------
 function onAddAdmin(p, msg) {
   const w = worlds.get(p.world); if (!w) return;
-  if (w.owner !== p.name) return toPlayer(p, 'notify', { text: 'Only the world owner can add admins.' });
-  const { name, error } = validateAccountName(msg.name, { allowDeveloper: true });
+  if (normalizeAccountName(w.owner) !== normalizeAccountName(p.name)) return toPlayer(p, 'notify', { text: 'Only the world owner can add admins.' });
+  let { name, error } = validateAccountName(msg.name, { allowDeveloper: true });
   if (error) return toPlayer(p, 'notify', { text: error });
-  if (!name || name === p.name) return;
-  if (!w.admins.includes(name)) w.admins.push(name);
+  name = canonicalExistingAccountName(name);
+  if (!name || normalizeAccountName(name) === normalizeAccountName(p.name)) return;
+  if (!w.admins.some((admin) => normalizeAccountName(admin) === normalizeAccountName(name))) w.admins.push(name);
   // sync to the world-lock tile data
   for (const k in w.data) if (w.data[k].lock && w.data[k].lock.scope === 'world') w.data[k].lock.admins = w.admins;
   toPlayer(p, 'notify', { text: `${name} is now an admin of ${w.name}.` });
@@ -1041,7 +1076,7 @@ function cmdStudioKey(p) {
 
 function isWorldOwner(p) {
   const w = worlds.get(p.world);
-  return !!(w && w.owner && w.owner === p.name);
+  return !!(w && w.owner && normalizeAccountName(w.owner) === normalizeAccountName(p.name));
 }
 function runCommand(p, cmd, arg) {
   const c = COMMANDS[cmd];
@@ -1207,8 +1242,11 @@ function onTradeOffer(p, msg) {
   // validate offered items are owned
   const items = {};
   for (const [id, c] of Object.entries(msg.items || {})) {
-    if (ITEMS[id] && ITEMS[id].permanent) continue; // can't trade away tools
-    const count = Math.max(0, Math.min(has(p, id, 1e9) ? p.inventory[id] : 0, c | 0));
+    const item = ITEMS[id];
+    if (!item || item.permanent || item.type === 'currency') continue; // tools/currency use their own paths
+    const owned = Math.max(0, Math.floor(Number(p.inventory[id]) || 0));
+    const requested = Math.max(0, Math.floor(Number(c) || 0));
+    const count = Math.min(owned, requested);
     if (count > 0) items[id] = count;
   }
   p.trade.items = items;
