@@ -447,13 +447,12 @@ export class UI {
     const cd = $('chatDraft');
     const text = cd.value.trim();
     if (text) this.net.send('chat', { text });   // server posts the notif + a speech bubble
-    cd.value = '';
-    cd.focus();                                   // keep the notch open for a quick reply
+    this.hideChat();                              // Enter sends AND closes the chat + keyboard
   }
   hideChat() {
     const form = $('chatForm');
     if (form.classList.contains('hidden')) return;
-    $('chatDraft').value = '';
+    const cd = $('chatDraft'); cd.value = ''; cd.blur();   // blur dismisses the soft keyboard
     form.classList.add('hidden');
     if (this._notifPrevH != null) { $('notifBar').style.height = this._notifPrevH + 'px'; this._notifPrevH = null; }
     setTyping(false);

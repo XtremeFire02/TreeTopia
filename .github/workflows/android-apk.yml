@@ -13,6 +13,7 @@ on:
       - 'public/**'
       - 'capacitor.config.json'
       - 'package.json'
+      - 'android-overrides/**'
       - '.github/workflows/android-apk.yml'
 
 permissions:
@@ -61,6 +62,16 @@ jobs:
           # lock the main activity to landscape (sensor-driven, either way up)
           if ! grep -q 'screenOrientation' "$manifest"; then
             sed -i 's#android:name="\.MainActivity"#android:name=".MainActivity"\n            android:screenOrientation="sensorLandscape"#' "$manifest"
+          fi
+
+      - name: Enable immersive fullscreen (hide status + nav bars)
+        run: |
+          target=$(find android/app/src/main/java -name MainActivity.java | head -1)
+          if [ -n "$target" ]; then
+            cp android-overrides/MainActivity.java "$target"
+            echo "Patched immersive MainActivity at $target"
+          else
+            echo "::warning::MainActivity.java not found; skipping immersive patch"
           fi
 
       - name: Build the debug APK
