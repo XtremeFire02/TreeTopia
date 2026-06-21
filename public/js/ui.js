@@ -1,6 +1,7 @@
 // All DOM-driven UI: HUD, drag-up inventory drawer, searchable shop, trade,
 // admin, player profiles (wrench), chat, toasts, account login.
 import { ITEMS, shopCatalog, PACKS, SHOP_INDIVIDUAL, PERMANENT, isPlaceable } from './shared/items.js';
+import { CUSTOM_ITEMS } from './shared/custom-items.js';
 import { iconUrl } from './assets.js';
 import { setTyping } from './input.js';
 
@@ -159,6 +160,20 @@ export class UI {
       }
     }
 
+    // custom items made in the Sprite Studio that were given a shop price
+    const customs = Object.keys(CUSTOM_ITEMS)
+      .map((id) => ITEMS[id])
+      .filter((it) => it && it.price != null && matches(it.name));
+    if (customs.length) {
+      grid.appendChild(this._shopHeader('🎨 Custom Items'));
+      for (const it of customs) {
+        const card = document.createElement('div'); card.className = 'item-card';
+        card.innerHTML = `<div class="ic">${this.icon(it.id)}</div><div class="nm">${it.name}</div><div class="pr">${it.price} 💎</div>`;
+        card.onclick = () => this.net.send('buy', { itemId: it.id, qty: 1 });
+        grid.appendChild(card);
+      }
+    }
+
     // rare items, still sold individually
     const rares = SHOP_INDIVIDUAL.map((id) => ITEMS[id]).filter((it) => it && it.price != null && matches(it.name));
     if (rares.length) {
@@ -173,7 +188,7 @@ export class UI {
 
     // when searching, also surface matching items from the wider catalog
     if (q) {
-      const shown = new Set(SHOP_INDIVIDUAL);
+      const shown = new Set([...SHOP_INDIVIDUAL, ...Object.keys(CUSTOM_ITEMS)]);
       const extra = shopCatalog().filter((s) => !shown.has(s.id) && matches(s.name)).slice(0, 60);
       if (extra.length) {
         grid.appendChild(this._shopHeader('🔎 More Items'));
