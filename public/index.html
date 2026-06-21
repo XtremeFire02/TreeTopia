@@ -59,12 +59,15 @@
       </div>
       <div class="hud-right">
         <span class="chip gems"><span id="gemCount">0</span> 💎</span>
-        <button id="chatBtn" class="hud-btn">💬 Chat</button>
-        <button id="sayBtn" class="hud-btn">📢 Cast</button>
-        <button id="shopBtn" class="hud-btn">🛒 Shop</button>
-        <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
-        <button id="devBtn" class="hud-btn hidden">⚙️ Dev</button>
-        <button id="exitBtn" class="hud-btn">🚪 Exit</button>
+        <button id="menuBtn" class="hud-btn">☰ Menu</button>
+        <div id="hudMenu" class="hud-menu hidden">
+          <button id="chatBtn" class="hud-btn">💬 Chat</button>
+          <button id="sayBtn" class="hud-btn">📢 Cast</button>
+          <button id="shopBtn" class="hud-btn">🛒 Shop</button>
+          <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
+          <button id="devBtn" class="hud-btn hidden">⚙️ Dev</button>
+          <button id="exitBtn" class="hud-btn">🚪 Exit</button>
+        </div>
       </div>
     </div>
 
@@ -77,7 +80,10 @@
       <div id="notifHandle" title="Drag down for older notifications"><span class="notch-bar"></span></div>
     </div>
     <!-- live chat draft notch (shown while composing world speech) -->
-    <input id="chatDraft" class="hidden" maxlength="120" autocomplete="off" placeholder="Type, then Enter to speak…" />
+    <form id="chatForm" class="hidden" autocomplete="off">
+      <input id="chatDraft" maxlength="120" autocomplete="off" placeholder="Type a message…" />
+      <button type="submit" id="chatSend" aria-label="Send">➤</button>
+    </form>
 
     <!-- toast notifications -->
     <div id="toasts"></div>

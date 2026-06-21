@@ -361,25 +361,40 @@ export class UI {
   }
   // ---------- local chat (💬) — live draft notch under the notification bar ----------
   startChat() {
-    const cd = $('chatDraft');
-    cd.classList.remove('hidden');
+    this.closeMenu();
+    const form = $('chatForm'), cd = $('chatDraft');
+    form.classList.remove('hidden');
     cd.value = '';
-    setTimeout(() => cd.focus(), 30);
+    setTyping(true);
+    // Focus synchronously inside the tap gesture so mobile keyboards actually open.
+    cd.focus();
   }
   sendChat() {
     const cd = $('chatDraft');
     const text = cd.value.trim();
     if (text) this.net.send('chat', { text });   // server posts the notif + a speech bubble
-    this.hideChat();
+    cd.value = '';
+    cd.focus();                                   // keep the notch open for a quick reply
   }
   hideChat() {
-    const cd = $('chatDraft');
-    if (cd.classList.contains('hidden')) return;
-    cd.value = '';
-    cd.classList.add('hidden');
+    const form = $('chatForm');
+    if (form.classList.contains('hidden')) return;
+    $('chatDraft').value = '';
+    form.classList.add('hidden');
     setTyping(false);
   }
   focusChat() { this.startChat(); }   // Enter on desktop opens the chat draft
+
+  // ---------- HUD menu (☰) — collapses every right-stack option but the gems chip ----------
+  toggleMenu() {
+    const menu = $('hudMenu'), btn = $('menuBtn');
+    const open = menu.classList.toggle('hidden');
+    btn.classList.toggle('open', !open);
+  }
+  closeMenu() {
+    $('hudMenu').classList.add('hidden');
+    $('menuBtn').classList.remove('open');
+  }
 
   // ---------- drawer drag (continuous height — drag the notch up/down) ----------
   wireDrawer() {
@@ -499,6 +514,10 @@ export class UI {
     $('acceptTradeBtn').onclick = () => { this.net.send('tradeAccept', { fromId: this._pendingFrom }); this.closeModals(); };
     $('declineTradeBtn').onclick = () => this.closeModals();
 
+    // collapsible HUD menu (☰): keep only the gems chip + ☰ on screen
+    $('menuBtn').onclick = () => this.toggleMenu();
+    $('hudMenu').addEventListener('click', (e) => { if (e.target.closest('.hud-btn')) this.closeMenu(); });
+
     // local chat (💬) + broadcasts (📢 Cast)
     $('chatBtn').onclick = () => this.startChat();
     $('sayBtn').onclick = () => this.openCompose();
@@ -508,14 +527,18 @@ export class UI {
     ci.addEventListener('focus', () => setTyping(true));
     ci.addEventListener('blur', () => setTyping(false));
     ci.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') this.closeModals(); });
-    // live chat-draft notch
+    // live chat-draft notch — a real <form> so the mobile keyboard's Go/Return reliably submits
     const cd = $('chatDraft');
-    cd.addEventListener('focus', () => setTyping(true));
-    cd.addEventListener('blur', () => setTyping(false));
+    $('chatForm').addEventListener('submit', (e) => { e.preventDefault(); this.sendChat(); });
+    cd.addEventListener('focus', () => { clearTimeout(this._blurHide); setTyping(true); });
+    cd.addEventListener('blur', () => {
+      setTyping(false);
+      // dismissing the keyboard with nothing typed closes the notch (no Esc key on mobile)
+      this._blurHide = setTimeout(() => { if (!cd.value.trim()) this.hideChat(); }, 200);
+    });
     cd.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') this.sendChat();
-      else if (e.key === 'Escape') this.hideChat();
+      if (e.key === 'Escape') this.hideChat();
     });
   }
 }
