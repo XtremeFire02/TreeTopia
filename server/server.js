@@ -227,6 +227,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (player.trade) cancelTrade(player, 'Partner disconnected.');
     if (player.world) leaveWorld(player);
+    if (player.name) player.lastSeen = Date.now();   // remember when they were last online
     saveProfile(player);
     players.delete(id);
   });
@@ -309,6 +310,10 @@ function handle(p, msg) {
     case 'register':    return onRegister(p, msg);
     case 'login':       return onLogin(p, msg);
     case 'getProfile':  return onGetProfile(p, msg);
+    case 'addFriend':   return onAddFriend(p, msg);
+    case 'removeFriend': return onRemoveFriend(p, msg);
+    case 'getFriends':  return onGetFriends(p);
+    case 'warpToFriend': return onWarpToFriend(p, msg);
     case 'getWorlds':   return onGetWorlds(p);
     case 'enterWorld':  return onEnterWorld(p, msg);
     case 'leaveWorld':  return (p.world && leaveWorld(p), onGetWorlds(p));
@@ -362,6 +367,8 @@ function loginSuccess(p, name, extra = {}) {
   // migrate the old single 'body' outfit slot to the new 'shirt' slot
   if (p.equipped.body && !p.equipped.shirt) p.equipped.shirt = p.equipped.body;
   delete p.equipped.body;
+  p.friends = (prof && Array.isArray(prof.friends)) ? prof.friends.slice() : [];
+  p.lastSeen = Date.now();
   p.dev = isDeveloper(p);
   for (const t of PERMANENT) p.inventory[t] = 1;                 // always-present tools
   for (const c of STARTER_CLOTHING) if (!p.inventory[c]) p.inventory[c] = 1; // own your clothes
@@ -435,13 +442,95 @@ function onGetProfile(p, msg) {
   const effects = [];
   if (hasEffect(inv, 'double_jump')) effects.push('🪽 Double Jump (Angel Wings)');
   if (hasEffect(inv, 'long_punch')) effects.push('👁️ Long Punch (Cyclopean Visor)');
+  const added = (p.friends || []).includes(name);
+  const mutual = areMutual(p.name, name);
   toPlayer(p, 'profile', {
     name, online: !!online, dev: isDeveloperName(name),
     gems: isDeveloperName(name) ? DEV_GEM_BALANCE : (prof.gems || 0),
     achievements: (prof.achievements || []).map((id) => ACHIEVEMENTS[id] || id),
     ownedWorlds: prof.ownedWorlds || [],
     effects,
+    isSelf: name === p.name,
+    added, friend: mutual,
+    // last login is only revealed to mutual friends
+    lastSeen: mutual ? lastSeenOf(name) : null,
+    world: (mutual && online && online.world) ? online.world : null,
   });
+}
+
+// ---------- friends ----------
+// Friendship is mutual: you're "friends" once both players have added each
+// other (so warping into someone's world always has their consent).
+function findOnline(name) { return [...players.values()].find((pl) => pl.name === name) || null; }
+function friendsOf(name) { const on = findOnline(name); return (on ? on.friends : (profiles[name] && profiles[name].friends)) || []; }
+function areMutual(a, b) { return friendsOf(a).includes(b) && friendsOf(b).includes(a); }
+function lastSeenOf(name) { const on = findOnline(name); if (on) return Date.now(); return (profiles[name] && profiles[name].lastSeen) || null; }
+function accountExists(name) { return !!accounts[name]; }
+
+// resolve the target account name from {id} (online player) or {name}
+function resolveTargetName(msg) {
+  if (msg.id != null) { const t = players.get(msg.id); if (t && t.name) return t.name; }
+  if (msg.name) { const r = validateAccountName(msg.name, { allowDeveloper: true }); if (!r.error) return r.name; }
+  return null;
+}
+
+function friendListFor(p) {
+  return (p.friends || []).map((name) => {
+    const online = findOnline(name);
+    const mutual = areMutual(p.name, name);
+    return {
+      name, dev: isDeveloperName(name),
+      online: !!online, mutual,
+      world: (mutual && online && online.world) ? online.world : null,
+      lastSeen: online ? null : ((profiles[name] && profiles[name].lastSeen) || null),
+    };
+  });
+}
+function sendFriends(p) { toPlayer(p, 'friends', { friends: friendListFor(p) }); }
+
+function onGetFriends(p) { if (p.name) sendFriends(p); }
+
+function onAddFriend(p, msg) {
+  if (!p.name) return;
+  const target = resolveTargetName(msg);
+  if (!target) return toPlayer(p, 'notify', { text: 'Could not find that player.' });
+  if (target === p.name) return toPlayer(p, 'notify', { text: "You can't add yourself." });
+  if (!accountExists(target)) return toPlayer(p, 'notify', { text: 'No such player.' });
+  p.friends = p.friends || [];
+  if (p.friends.includes(target)) return toPlayer(p, 'notify', { text: `${target} is already on your friends list.` });
+  p.friends.push(target);
+  saveProfile(p);
+  if (areMutual(p.name, target)) {
+    toPlayer(p, 'notify', { text: `You and ${target} are now friends! 🎉` });
+    const t = findOnline(target);
+    if (t) { toPlayer(t, 'notify', { text: `You and ${p.name} are now friends! 🎉` }); sendFriends(t); }
+  } else {
+    toPlayer(p, 'notify', { text: `Added ${target}. You'll be friends once they add you back.` });
+    const t = findOnline(target);
+    if (t) toPlayer(t, 'notify', { text: `${p.name} added you as a friend — add them back to become friends.` });
+  }
+  sendFriends(p);
+}
+
+function onRemoveFriend(p, msg) {
+  if (!p.name) return;
+  const target = resolveTargetName(msg) || String(msg.name || '');
+  p.friends = (p.friends || []).filter((n) => n !== target);
+  saveProfile(p);
+  toPlayer(p, 'notify', { text: `Removed ${target} from your friends.` });
+  const t = findOnline(target);
+  if (t) sendFriends(t);   // their view of mutual-ness changed
+  sendFriends(p);
+}
+
+function onWarpToFriend(p, msg) {
+  if (!p.name) return;
+  const target = resolveTargetName(msg) || String(msg.name || '');
+  if (!areMutual(p.name, target)) return toPlayer(p, 'notify', { text: `You can only warp to mutual friends.` });
+  const t = findOnline(target);
+  if (!t) return toPlayer(p, 'notify', { text: `${target} is offline.` });
+  if (!t.world) return toPlayer(p, 'notify', { text: `${target} isn't in a world right now.` });
+  onEnterWorld(p, { name: t.world });
 }
 
 function award(p, id) {
@@ -1212,7 +1301,7 @@ function loadProfiles() {
 }
 function saveProfile(p) {
   if (!p.name) return;
-  profiles[p.name] = { gems: p.gems || 0, inventory: p.inventory, achievements: p.achievements || [], ownedWorlds: p.ownedWorlds || [], equipped: p.equipped || {} };
+  profiles[p.name] = { gems: p.gems || 0, inventory: p.inventory, achievements: p.achievements || [], ownedWorlds: p.ownedWorlds || [], equipped: p.equipped || {}, friends: p.friends || [], lastSeen: p.lastSeen || Date.now() };
   clearTimeout(saveProfile._t);
   saveProfile._t = setTimeout(() => {
     fs.writeFile(PROFILES_FILE, JSON.stringify(profiles), () => {});

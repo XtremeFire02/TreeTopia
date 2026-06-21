@@ -234,14 +234,60 @@ export class UI {
     // moderation actions (server still enforces permissions)
     this._profileTargetName = m.name;
     const me = this.game.me;
-    const isSelf = m.name === me.name;
+    const isSelf = m.isSelf || m.name === me.name;
     const amOwner = !!(this.game.world && this.game.world.owner && this.game.world.owner === me.name);
     const amDev = !!me.dev;
     const canModerate = !!m.online && !isSelf && !m.dev;   // developers can't be targeted
     $('profOwnerActions').classList.toggle('hidden', !((amOwner || amDev) && canModerate));
     $('profDevActions').classList.toggle('hidden', !(amDev && canModerate));
 
+    // friend controls
+    const fbox = $('profFriendBox');
+    fbox.classList.toggle('hidden', isSelf);
+    if (!isSelf) {
+      const addBtn = $('profAddFriendBtn'), warpBtn = $('profWarpBtn'), last = $('profLastSeen');
+      addBtn.textContent = m.added ? '➖ Remove Friend' : '➕ Add Friend';
+      addBtn.onclick = () => {
+        this.net.send(m.added ? 'removeFriend' : 'addFriend', { name: m.name });
+        this.closeModals();
+      };
+      // last login is only sent for mutual friends
+      last.textContent = m.friend
+        ? (m.online ? '🟢 Online now' : (m.lastSeen ? 'Last login: ' + timeAgo(m.lastSeen) : 'Last login: unknown'))
+        : (m.added ? 'Pending — they need to add you back to become friends.' : 'Add as a friend to see their last login and warp to them.');
+      const canWarp = m.friend && m.online && m.world;
+      warpBtn.classList.toggle('hidden', !canWarp);
+      warpBtn.textContent = canWarp ? `🌀 Warp to ${m.world}` : '🌀 Warp to world';
+      warpBtn.onclick = () => { this.net.send('warpToFriend', { name: m.name }); this.closeModals(); };
+    }
+
     this.openModal('profileModal');
+  }
+
+  // ---------- friends list ----------
+  openFriends() { this.net.send('getFriends'); this.openModal('friendsModal'); }
+  onFriends(list) {
+    const box = $('friendsList'); if (!box) return;
+    box.innerHTML = '';
+    if (!list || !list.length) { box.innerHTML = '<div class="hint">No friends yet. Wrench a player and tap “Add Friend”.</div>'; return; }
+    // mutual friends first, then by name
+    list.sort((a, b) => Number(b.mutual) - Number(a.mutual) || a.name.localeCompare(b.name));
+    for (const f of list) {
+      const row = document.createElement('div'); row.className = 'friend-row';
+      const status = f.online ? '🟢 Online' + (f.world ? ` · in ${f.world}` : '') : (f.lastSeen ? '⚪ ' + timeAgo(f.lastSeen) : '⚪ Offline');
+      const tag = f.mutual ? '' : ' <span class="pending">pending</span>';
+      row.innerHTML = `<div class="fr-main"><span class="fr-name ${f.dev ? 'dev-name' : ''}">${escapeHtml((f.dev && !f.name.startsWith('@') ? '@' : '') + f.name)}</span>${tag}<div class="fr-status">${status}</div></div>`;
+      const acts = document.createElement('div'); acts.className = 'fr-acts';
+      if (f.mutual && f.online && f.world) {
+        const warp = document.createElement('button'); warp.className = 'ghost-btn'; warp.textContent = '🌀 Warp';
+        warp.onclick = () => { this.net.send('warpToFriend', { name: f.name }); this.closeModals(); };
+        acts.appendChild(warp);
+      }
+      const rm = document.createElement('button'); rm.className = 'ghost-btn'; rm.textContent = '✕';
+      rm.title = 'Remove friend'; rm.onclick = () => this.net.send('removeFriend', { name: f.name });
+      acts.appendChild(rm);
+      row.appendChild(acts); box.appendChild(row);
+    }
   }
   sendModAction(cmd) {
     const name = this._profileTargetName;
@@ -503,6 +549,11 @@ export class UI {
 
   // ---------- static buttons ----------
   wireStaticButtons() {
+    $('friendsBtn').onclick = () => this.openFriends();
+    $('addFriendByNameBtn').onclick = () => {
+      const name = $('friendNameInput').value.trim();
+      if (name) { this.net.send('addFriend', { name }); $('friendNameInput').value = ''; }
+    };
     $('shopBtn').onclick = async () => {
       this.renderShop(); this.openModal('shopModal');
       await loadCustomItems();   // pick up items saved in the studio since boot
@@ -581,6 +632,16 @@ function formatGems(gems) {
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// human-readable "time since" for friend last-login ("5m ago", "2h ago", "3d ago")
+function timeAgo(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - Number(ts)) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24); if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30); return mo < 12 ? `${mo}mo ago` : `${Math.floor(mo / 12)}y ago`;
+}
 
 // Fire `fn` on a double click / double tap of `el` (works for mouse and touch).
 function onDoubleTap(el, fn) {

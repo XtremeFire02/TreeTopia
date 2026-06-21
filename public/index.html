@@ -63,6 +63,7 @@
         <div id="hudMenu" class="hud-menu hidden">
           <button id="chatBtn" class="hud-btn">💬 Chat</button>
           <button id="sayBtn" class="hud-btn">📢 Cast</button>
+          <button id="friendsBtn" class="hud-btn">👥 Friends</button>
           <button id="shopBtn" class="hud-btn">🛒 Shop</button>
           <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
           <button id="devBtn" class="hud-btn hidden">⚙️ Dev</button>
@@ -181,6 +182,14 @@
     <div id="profileModal" class="modal hidden">
       <div class="modal-head"><h3>👤 <span id="profName"></span></h3><button class="close-x" data-close>✕</button></div>
       <div id="profOnline" class="hint"></div>
+      <div id="profFriendBox" class="prof-section hidden">
+        <h4>👥 Friend</h4>
+        <div id="profLastSeen" class="hint"></div>
+        <div class="action-row">
+          <button class="ghost-btn" id="profAddFriendBtn">➕ Add Friend</button>
+          <button class="ghost-btn hidden" id="profWarpBtn">🌀 Warp to world</button>
+        </div>
+      </div>
       <div class="prof-section"><h4>🏆 Achievements</h4><ul id="profAchievements" class="prof-list"></ul></div>
       <div class="prof-section"><h4>🌍 Worlds Owned</h4><ul id="profWorlds" class="prof-list"></ul></div>
       <div class="prof-section"><h4>✨ Effects</h4><ul id="profEffects" class="prof-list"></ul></div>
@@ -202,6 +211,14 @@
         </div>
       </div>
       <div class="row-right"><button id="profTradeBtn" class="big-btn small hidden">🤝 Request Trade</button></div>
+    </div>
+
+    <!-- Friends -->
+    <div id="friendsModal" class="modal hidden">
+      <div class="modal-head"><h3>👥 Friends</h3><button class="close-x" data-close>✕</button></div>
+      <div id="friendsList" class="friends-list"></div>
+      <div class="splice-row"><input id="friendNameInput" maxlength="16" placeholder="Add a friend by name…" /><button id="addFriendByNameBtn" class="big-btn small">Add</button></div>
+      <p class="hint">Wrench a player and tap <b>Add Friend</b>. You become friends once you both add each other — then you can see their last login and 🌀 warp to their world.</p>
     </div>
 
     <!-- Developer tools (developers only) -->

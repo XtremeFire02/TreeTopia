@@ -49,6 +49,7 @@ net.on('worldList', (m) => renderWorldList(m.worlds));
 net.on('notify', (m) => ui.toast(m.text));
 net.on('notif', (m) => ui.addNotif(m));
 net.on('profile', (m) => ui.onProfile(m));
+net.on('friends', (m) => ui.onFriends(m.friends || []));
 net.on('devList', (m) => ui.onDevList(m.developers || []));
 net.on('kickedFromWorld', (m) => {
   game.stop();
