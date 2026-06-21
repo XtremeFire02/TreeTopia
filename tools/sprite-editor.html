@@ -68,11 +68,18 @@
 </style>
 </head>
 <body>
-  <h1>🎨 Sprite Studio <span>· TreeTopia</span> <small>16×16 pixel + animation editor</small></h1>
+  <h1>🎨 Sprite Studio <span>· TreeTopia</span> <small>16/32/64 pixel + animation editor</small></h1>
   <div class="app">
 
     <!-- LEFT: type + tools + colour -->
     <div class="col">
+      <h3>Canvas size</h3>
+      <div class="row">
+        <button class="btn small size active" data-size="16">16×16</button>
+        <button class="btn small size" data-size="32">32×32</button>
+        <button class="btn small size" data-size="64">64×64</button>
+      </div>
+
       <h3>Asset type</h3>
       <select id="assetType" class="btn" style="text-align:left">
         <option value="block">Block</option>
@@ -82,7 +89,7 @@
         <option value="pet">Pet</option>
         <option value="icon">Item icon</option>
       </select>
-      <div class="hint">Every asset is a 16×16 sprite. The type only changes the onion-skin reference shown behind your art.</div>
+      <div class="hint">Pick a square size (16/32/64). Bigger = more detail; the game scales any size to fit a tile. Type only sets the onion-skin reference.</div>
 
       <h3>Tools</h3>
       <button class="btn tool active" data-tool="pencil">✏️ Pencil <small>(B)</small></button>
@@ -186,7 +193,7 @@
 
 <script>
 (function(){
-  const W=16, H=16;                 // every asset is 16×16
+  let W=16, H=16;                   // square canvas: 16, 32 or 64
   const ONION = {
     block:null, seed:null, icon:null, pet:null,
     wings: 'wings',
@@ -219,17 +226,32 @@
   function layout(){
     cell = Math.floor(Math.min(480/W, 460/H));
     editC.width=W*cell; editC.height=H*cell;
-    prev1.width=W; prev1.height=H;
-    prev4.width=W*4; prev4.height=H*4;
-    prev8.width=W*8; prev8.height=H*8;
+    // previews render at native resolution; CSS scales them to a fixed display size
+    for(const c of [prev1,prev4,prev8]){ c.width=W; c.height=H; }
+    prev1.style.width=Math.min(64,W)+'px';
+    prev4.style.width='72px';
+    prev8.style.width='104px';
     $('status').textContent = W+' × '+H+' · frame '+(af+1)+'/'+frames.length;
+  }
+  // Resize the whole project to a new square size, keeping any overlapping art.
+  function setSize(n){
+    if(n===W){ return; }
+    frames = frames.map(g=>{
+      const ng = Array.from({length:n},()=>Array(n).fill(null));
+      for(let y=0;y<Math.min(n,H);y++) for(let x=0;x<Math.min(n,W);x++) ng[y][x]=g[y][x];
+      return ng;
+    });
+    W=n; H=n; undoStack=[]; redoStack=[];
+    document.querySelectorAll('.size').forEach(b=>b.classList.toggle('active', +b.dataset.size===n));
+    layout(); render(); buildFrames();
   }
 
   // ---------- onion references ----------
   function drawOnion(ctx, sc){
     if(!$('optOnion').checked || !onionRef) return;
     ctx.save(); ctx.globalAlpha=0.30;
-    const R=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(x*sc,y*sc,w*sc,h*sc); };
+    const k=(W/16)*sc;   // the reference is authored in 16-px space; scale it to the canvas
+    const R=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(x*k,y*k,w*k,h*k); };
     if(onionRef==='character'){
       R(4,1,8,3,'#5a3a1b');                 // hair
       R(4,3,8,5,'#f4cda0');                 // head
@@ -287,9 +309,7 @@
   function tick(now){
     const idx = playing ? animIndex(now) : af;
     const g = frames[Math.min(idx, frames.length-1)];
-    paintGrid(p1, g, 1);
-    paintGrid(p4, g, 4);
-    paintGrid(p8, g, 8);
+    paintGrid(p1, g, 1); paintGrid(p4, g, 1); paintGrid(p8, g, 1);   // CSS scales the display
     requestAnimationFrame(tick);
   }
 
@@ -298,8 +318,8 @@
     const wrap=$('frames'); wrap.innerHTML='';
     frames.forEach((g,i)=>{
       const d=document.createElement('div'); d.className='frame'+(i===af?' sel':'');
-      const c=document.createElement('canvas'); c.width=W*3; c.height=H*3; c.dataset.i=i;
-      paintGrid(c.getContext('2d'), g, 3);
+      const c=document.createElement('canvas'); c.width=W; c.height=H; c.style.width='48px'; c.style.height='48px'; c.dataset.i=i;
+      paintGrid(c.getContext('2d'), g, 1);
       const num=document.createElement('span'); num.className='fnum'; num.textContent=i+1;
       const del=document.createElement('button'); del.className='fdel'; del.textContent='×'; del.title='Delete frame';
       del.onclick=(e)=>{ e.stopPropagation(); deleteFrame(i); };
@@ -315,7 +335,7 @@
   }
   function drawFrameThumb(i){
     const c=$('frames').querySelector('canvas[data-i="'+i+'"]');
-    if(c) paintGrid(c.getContext('2d'), frames[i], 3);
+    if(c) paintGrid(c.getContext('2d'), frames[i], 1);
   }
   function addFrame(){ frames.splice(af+1,0,blank()); af++; layout(); render(); buildFrames(); }
   function dupFrame(){ frames.splice(af+1,0,grid().map(r=>r.slice())); af++; layout(); render(); buildFrames(); }
@@ -377,6 +397,7 @@
   function selectSwatch(){ document.querySelectorAll('.sw').forEach(s=>s.classList.toggle('sel', s.dataset.c===color)); }
   $('color').addEventListener('input', e=>{ color=e.target.value; selectSwatch(); });
   document.querySelectorAll('.tool').forEach(b=> b.onclick=()=>{ tool=b.dataset.tool; document.querySelectorAll('.tool').forEach(x=>x.classList.toggle('active',x===b)); });
+  document.querySelectorAll('.size').forEach(b=> b.onclick=()=>{ setSize(+b.dataset.size); });
   $('assetType').onchange = e=>{ onionRef=ONION[e.target.value]; if(onionRef) $('optOnion').checked=true; render(); };
   $('optGrid').onchange=render; $('optSym').onchange=render; $('optOnion').onchange=render; $('optPrev').onchange=render;
   $('clearBtn').onclick = ()=>{ pushUndo(); frames[af]=blank(); render(); buildFrames(); };
@@ -430,6 +451,7 @@
       const legend={'.':null}; let nframes=1; let i=0;
       for(; i<lines.length; i++){ const l=lines[i].trim();
         if(l.startsWith('name:')) $('name').value=l.slice(5).trim();
+        else if(l.startsWith('size:')){ const s=+(l.slice(5).trim().split('x')[0])||16; const n=s>=48?64:s>=24?32:16; W=n; H=n; document.querySelectorAll('.size').forEach(b=>b.classList.toggle('active', +b.dataset.size===n)); }
         else if(l.startsWith('type:')){ const t=l.slice(5).trim(); if(ONION[t]!==undefined){ $('assetType').value=t; onionRef=ONION[t]; } }
         else if(l.startsWith('frames:')) nframes=+l.slice(7).trim()||1;
         else if(l.startsWith('frameMs:')) setMs(l.slice(8).trim());
@@ -527,13 +549,18 @@
       const img=new Image(); img.crossOrigin='anonymous';
       img.onload=()=>{
         const fw=Math.floor(img.naturalWidth/nframes)||img.naturalWidth;
-        const c=document.createElement('canvas'); c.width=16; c.height=16; const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
+        // adopt the nearest supported square size so detail isn't lost on 32/64 art
+        const src=Math.max(fw, img.naturalHeight);
+        const n = src>=48 ? 64 : src>=24 ? 32 : 16;
+        W=n; H=n;
+        document.querySelectorAll('.size').forEach(b=>b.classList.toggle('active', +b.dataset.size===n));
+        const c=document.createElement('canvas'); c.width=n; c.height=n; const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
         const nf=[];
         for(let f=0;f<nframes;f++){
-          x.clearRect(0,0,16,16); x.drawImage(img, f*fw,0,fw,img.naturalHeight, 0,0,16,16);
-          let data; try{ data=x.getImageData(0,0,16,16).data; }catch(_){ data=null; }
+          x.clearRect(0,0,n,n); x.drawImage(img, f*fw,0,fw,img.naturalHeight, 0,0,n,n);
+          let data; try{ data=x.getImageData(0,0,n,n).data; }catch(_){ data=null; }
           const g=blank();
-          if(data) for(let y=0;y<16;y++)for(let xx=0;xx<16;xx++){ const o=(y*16+xx)*4; if(data[o+3]>=128) g[y][xx]=rgbHex(data[o],data[o+1],data[o+2]); }
+          if(data) for(let y=0;y<n;y++)for(let xx=0;xx<n;xx++){ const o=(y*n+xx)*4; if(data[o+3]>=128) g[y][xx]=rgbHex(data[o],data[o+1],data[o+2]); }
           nf.push(g);
         }
         frames=nf; af=0; layout(); render(); buildFrames(); res();
