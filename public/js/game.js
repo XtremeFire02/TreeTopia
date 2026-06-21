@@ -7,6 +7,7 @@ import { ITEMS, isSolid, hasEffect, hasEquippedEffect, isPlaceable } from './sha
 import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE } from './shared/names.js';
 import { keys, mouse } from './input.js';
 import { tileSprite, dropSprite } from './assets.js';
+import { playJump, playPunch } from './sfx.js';
 
 export class Game {
   constructor(net, ui) {
@@ -154,6 +155,7 @@ export class Game {
     if (L.onGround) L.jumpsUsed = 0;
     if (jumpKey && !this._jumpHeld && L.jumpsUsed < maxJumps) {
       L.vy = -JUMP_VELOCITY; L.onGround = false; L.jumpsUsed++;
+      playJump();
     }
     this._jumpHeld = jumpKey;
 
@@ -270,6 +272,7 @@ export class Game {
       this.local.punchAngle = Math.atan2(dy, dx);
       this.local.punchDist = Math.min(Math.hypot(dx, dy), maxReach);
       this.local.punchDir = Math.cos(this.local.punchAngle) >= 0 ? 1 : -1;
+      playPunch();
       this.net.send('break', { x: t.x, y: t.y });
     } else if (mouse.right && this.selected && isPlaceable(this.selected) && now - this._lastAction > 200) {
       this._lastAction = now;
@@ -292,6 +295,7 @@ export class Game {
     this.local.punchAngle = Math.atan2(dy, dx);
     this.local.punchDist = Math.min(Math.hypot(dx, dy), maxReach);
     this.local.punchDir = Math.cos(this.local.punchAngle) >= 0 ? 1 : -1;
+    playPunch();
     this.net.send('break', { x: tx, y: ty });
   }
   pointerTile() {

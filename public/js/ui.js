@@ -111,11 +111,11 @@ export class UI {
       const worn = clothing && this.game.me.equipped && this.game.me.equipped[slot] === id;
       const card = document.createElement('div');
       card.className = 'item-card' + (this.game.selected === id ? ' active' : '') + (worn ? ' worn' : '');
-      const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'double-tap') : 'x' + inv[id]);
+      const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'tap to wear') : 'x' + inv[id]);
       card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${it.name}</div><div class="ct">${tag}</div>`;
       if (clothing) {
-        // double-tap (here in the inventory only) equips / unequips clothing
-        onDoubleTap(card, () => this.net.send('equip', { itemId: id }));
+        // a single tap (here in the inventory only) equips / unequips clothing
+        card.onclick = () => this.net.send('equip', { itemId: id });
       } else {
         card.onclick = () => { this.game.selected = id; this.buildHotbar(); this.renderInventory(); };
       }
@@ -359,12 +359,16 @@ export class UI {
     else if (mode === 'super') this.net.send('superBroadcast', { text });
     ci.value = ''; this.closeModals();
   }
-  // ---------- local chat (💬) — live draft notch under the notification bar ----------
+  // ---------- local chat (💬) — live draft notch built into the notification bar ----------
   startChat() {
     this.closeMenu();
-    const form = $('chatForm'), cd = $('chatDraft');
+    const form = $('chatForm'), cd = $('chatDraft'), bar = $('notifBar');
     form.classList.remove('hidden');
     cd.value = '';
+    // grow the bar so the draft + a couple of messages stay visible while typing
+    this._notifPrevH = bar.getBoundingClientRect().height;
+    const want = Math.min(180, Math.round(window.innerHeight * 0.5));
+    if (this._notifPrevH < want) bar.style.height = want + 'px';
     setTyping(true);
     // Focus synchronously inside the tap gesture so mobile keyboards actually open.
     cd.focus();
@@ -381,6 +385,7 @@ export class UI {
     if (form.classList.contains('hidden')) return;
     $('chatDraft').value = '';
     form.classList.add('hidden');
+    if (this._notifPrevH != null) { $('notifBar').style.height = this._notifPrevH + 'px'; this._notifPrevH = null; }
     setTyping(false);
   }
   focusChat() { this.startChat(); }   // Enter on desktop opens the chat draft
@@ -548,13 +553,3 @@ function formatGems(gems) {
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-
-// Fire `fn` on a double click / double tap of `el` (works for mouse and touch).
-function onDoubleTap(el, fn) {
-  let last = 0;
-  el.addEventListener('click', (e) => {
-    const now = Date.now();
-    if (now - last < 320) { last = 0; e.preventDefault(); fn(); }
-    else last = now;
-  });
-}

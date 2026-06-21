@@ -75,15 +75,15 @@
     <div id="playerTags"></div>
 
     <!-- global notification bar (drag the handle down for history) -->
+    <!-- the chat draft is a notch INSIDE the bar so it's visually part of it -->
     <div id="notifBar">
       <div id="notifScroll"></div>
+      <form id="chatForm" class="hidden" autocomplete="off">
+        <input id="chatDraft" maxlength="120" autocomplete="off" placeholder="Type a message…" />
+        <button type="submit" id="chatSend" aria-label="Send">➤</button>
+      </form>
       <div id="notifHandle" title="Drag down for older notifications"><span class="notch-bar"></span></div>
     </div>
-    <!-- live chat draft notch (shown while composing world speech) -->
-    <form id="chatForm" class="hidden" autocomplete="off">
-      <input id="chatDraft" maxlength="120" autocomplete="off" placeholder="Type a message…" />
-      <button type="submit" id="chatSend" aria-label="Send">➤</button>
-    </form>
 
     <!-- toast notifications -->
     <div id="toasts"></div>
@@ -94,8 +94,8 @@
     <!-- drag inventory drawer: drag the notch up/down to any height -->
     <div id="invDrawer">
       <div id="drawerNotch" title="Drag up or down to resize"><span class="notch-bar"></span></div>
+      <div id="hotbar"></div>
       <div id="drawerScroll">
-        <div id="hotbar"></div>
         <div id="drawerBody">
           <h4 class="drawer-title">🎒 Inventory</h4>
           <div id="inventoryGrid" class="item-grid"></div>
