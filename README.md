@@ -58,8 +58,8 @@ change.
 | Punch / break block | Left-click (hold to keep breaking) |
 | Place / plant selected item | Right-click |
 | Place into background layer | Hold `Shift` + right-click |
-| Select hotbar slot | `1`–`9` |
-| Open inventory | Drag the **notch ▲** up (or press `E`) |
+| Select hotbar slot | `1`–`5` |
+| Open inventory | Drag the suitcase handle or press `E` |
 | Inspect a player | Select the 🔧 **Wrench**, then click the wrench over a player |
 | Respawn (death animation) | `R` |
 | Chat | `Enter` |
@@ -92,8 +92,8 @@ change.
 - **~900 real sprites** — every sprite from the Kenney CC0 pack is implemented as a
   placeable / breakable / buyable item, rendered with its art. The shop has search + category
   filters to browse them all.
-- **Drag-up inventory** — a bottom drawer with a notch handle; drag it up to reveal your full
-  inventory (the hotbar stays docked at the bottom).
+- **Canvas inventory drawer** — the polished suitcase panel is drawn inside the game canvas,
+  collapses to the top five slots, and drags open to reveal the inventory and seed slots.
 - **Permanent tools** — the **Fist** ✊ (punch) and **Wrench** 🔧 can never be removed or traded.
 - **Wrench → player profiles** — select the wrench and a 🔧 appears beside each player; click it
   to see their **achievements**, **worlds owned** (where they placed a World Lock), **active

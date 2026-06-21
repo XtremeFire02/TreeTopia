@@ -11,3 +11,5 @@ server/data/
 *.apk
 *.aab
 *.ipa
+/output
+progress.md
