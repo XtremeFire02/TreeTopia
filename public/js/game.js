@@ -258,6 +258,7 @@ export class Game {
   // ---------- building ----------
   handleBuild(now) {
     if (this.ui.modalOpen()) return;
+    if (this.ui.blocksGamePointer && this.ui.blocksGamePointer(mouse.sx, mouse.sy)) return;
     if (this.selected === 'wrench') return; // wrench mode = inspect players, no building
     const t = this.pointerTile();
     if (!t) return;
@@ -456,7 +457,7 @@ export class Game {
 
     // build target highlight (hidden in wrench mode)
     const t = this.pointerTile();
-    if (t && this.selected !== 'wrench' && !this.ui.modalOpen()) {
+    if (t && this.selected !== 'wrench' && !this.ui.modalOpen() && !(this.ui.blocksGamePointer && this.ui.blocksGamePointer(mouse.sx, mouse.sy))) {
       const sx = t.x * TILE - camX, sy = t.y * TILE - camY;
       ctx.lineWidth = 2;
       ctx.strokeStyle = this.inReach(t.x, t.y) ? 'rgba(255,255,255,.8)' : 'rgba(210,74,74,.8)';
@@ -486,8 +487,38 @@ export class Game {
 
     ctx.restore();   // end scaled world space
 
+    if (this.ui) this.ui.drawCanvas(ctx, now);
+
     // DOM wrench buttons over players (only while the wrench is selected)
     this.ui.updatePlayerTags([...this.others.values()], this.camera, this.selected === 'wrench', z);
+  }
+
+  advanceTime(ms) {
+    if (!this.running || !this.world) return;
+    const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+    const start = performance.now();
+    for (let i = 0; i < steps; i++) this.update(1 / 60, start + i * (1000 / 60));
+    this.render(start + ms);
+  }
+
+  renderToText() {
+    const payload = {
+      coordinateSystem: 'canvas origin top-left; world origin top-left; x right, y down',
+      running: this.running,
+      selected: this.selected,
+      canvas: { width: this.canvas.width, height: this.canvas.height },
+      player: {
+        x: Math.round(this.local.x),
+        y: Math.round(this.local.y),
+        vx: Math.round(this.local.vx),
+        vy: Math.round(this.local.vy),
+        dead: !!this.local.dead,
+      },
+      camera: { x: Math.round(this.camera.x), y: Math.round(this.camera.y), zoom: this.zoom },
+      world: this.world ? { name: this.world.name, width: this.world.width, height: this.world.height } : null,
+      inventoryUi: this.ui && this.ui.inventoryTextState ? this.ui.inventoryTextState() : null,
+    };
+    return JSON.stringify(payload);
   }
 
   drawBubble(ctx, x, y, text) {

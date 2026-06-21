@@ -45,5 +45,5 @@ export function sheetSprite(id) {
 // drops draw the same sprite as the block/item they represent
 export const dropSprite = tileSprite;
 
-// URL for DOM <img> icons (hotbar / inventory / shop); null => fall back to emoji
+// URL for DOM <img> icons (shop / trade); null => fall back to emoji
 export function iconUrl(id) { return (ITEMS[id] && ITEMS[id].sprite) || null; }

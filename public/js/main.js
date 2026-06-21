@@ -12,6 +12,8 @@ const net = new Net();
 const ui = new UI(net);
 const game = new Game(net, ui);
 ui.setGame(game);
+window.render_game_to_text = () => game.renderToText();
+window.advanceTime = (ms) => game.advanceTime(ms);
 
 function showScreen(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.add('hidden');
@@ -141,7 +143,7 @@ $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pa
 // ---------- input ----------
 initInput(game.canvas, {
   onKey: (k) => {
-    if (k >= '1' && k <= '9') return ui.selectSlot(parseInt(k));
+    if (k >= '1' && k <= '5') return ui.selectSlot(parseInt(k));
     if (k === 'e') return ui.toggleDrawer();
     if (k === 'r') return game.requestRespawn();
     if (k === 'enter') return ui.focusChat();

@@ -1,10 +1,10 @@
-// All DOM-driven UI: HUD, drag-up inventory drawer, searchable shop, trade,
-// admin, player profiles (wrench), chat, toasts, account login.
-import { ITEMS, shopCatalog, PACKS, SHOP_INDIVIDUAL, PERMANENT, isPlaceable } from './shared/items.js';
+// DOM-driven HUD/modals plus the canvas-backed inventory and hotbar.
+import { ITEMS, shopCatalog, PACKS, SHOP_INDIVIDUAL } from './shared/items.js';
 import { CUSTOM_ITEMS } from './shared/custom-items.js';
 import { loadCustomItems } from './custom.js';
 import { iconUrl } from './assets.js';
 import { setTyping } from './input.js';
+import { CanvasInventory } from './canvas-inventory.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,11 +17,14 @@ export class UI {
     this._tagEls = {};
     this._profileTargetId = null;
     this._notifs = [];
+    this.canvasInventory = new CanvasInventory(this);
     this.wireStaticButtons();
-    this.wireDrawer();
     this.wireNotifBar();
   }
-  setGame(g) { this.game = g; }
+  setGame(g) {
+    this.game = g;
+    this.canvasInventory.setGame(g);
+  }
 
   // ---------- icon helper (sprite <img> or emoji) ----------
   icon(id) {
@@ -69,73 +72,17 @@ export class UI {
   onInventory() {
     $('gemCount').textContent = formatGems(this.game.me.gems);
     $('shopGems').textContent = formatGems(this.game.me.gems);
-    this.buildHotbar();
-    this.renderInventory();
+    this.canvasInventory.onInventory();
     if (!$('tradeModal').classList.contains('hidden')) this.refreshTradeSelects();
   }
 
-  // ---------- hotbar ----------
-  placeableItems() {
-    return Object.keys(this.game.me.inventory)
-      .filter((id) => this.game.me.inventory[id] > 0 && isPlaceable(id));
-  }
-  hotbarItems() {
-    const base = [...PERMANENT, ...this.placeableItems().slice(0, 9)];
-    // Always keep the currently-selected item usable, even if it's past the
-    // first 9 placeables — otherwise picking it from the inventory would snap
-    // the selection back to the fist and the item couldn't be placed.
-    const sel = this.game.selected;
-    if (sel && !base.includes(sel) && (PERMANENT.includes(sel) || this.placeableItems().includes(sel))) {
-      base.push(sel);
-    }
-    return base;
-  }
-  buildHotbar() {
-    const bar = $('hotbar'); bar.innerHTML = '';
-    const items = this.hotbarItems();
-    if (!this.game.selected || !items.includes(this.game.selected)) this.game.selected = 'fist';
-    items.forEach((id, idx) => {
-      const it = ITEMS[id]; if (!it) return;
-      const perm = !!it.permanent;
-      const cnt = this.game.me.inventory[id] || 0;
-      const slot = document.createElement('div');
-      slot.className = 'slot' + (this.game.selected === id ? ' active' : '') + (perm ? ' permanent' : '');
-      slot.innerHTML = `<span class="key">${idx + 1}</span>${this.icon(id)}` + (perm ? '' : `<span class="count">${cnt}</span>`);
-      slot.title = it.name;
-      slot.onclick = () => { this.game.selected = id; this.buildHotbar(); };
-      bar.appendChild(slot);
-    });
-  }
-  selectSlot(n) { const items = this.hotbarItems(); if (items[n - 1]) { this.game.selected = items[n - 1]; this.buildHotbar(); } }
-
-  // ---------- inventory grid (inside drawer) ----------
-  renderInventory() {
-    const grid = $('inventoryGrid'); grid.innerHTML = '';
-    const inv = this.game.me.inventory;
-    const ids = Object.keys(inv).filter((id) => inv[id] > 0);
-    ids.sort((a, b) => (ITEMS[b]?.permanent ? 1 : 0) - (ITEMS[a]?.permanent ? 1 : 0));
-    for (const id of ids) {
-      const it = ITEMS[id]; if (!it) continue;
-      const clothing = it.type === 'clothing';
-      const slot = it.slot || 'body';
-      const worn = clothing && this.game.me.equipped && this.game.me.equipped[slot] === id;
-      const card = document.createElement('div');
-      card.className = 'item-card' + (this.game.selected === id ? ' active' : '') + (worn ? ' worn' : '');
-      const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'double-tap') : 'x' + inv[id]);
-      card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${it.name}</div><div class="ct">${tag}</div>`;
-      if (clothing) {
-        // double-tap (here in the inventory only) equips / unequips clothing
-        onDoubleTap(card, () => this.net.send('equip', { itemId: id }));
-      } else {
-        card.onclick = () => { this.game.selected = id; this.buildHotbar(); this.renderInventory(); };
-      }
-      grid.appendChild(card);
-    }
-    // splice selects
-    const seeds = ids.filter((id) => ITEMS[id].type === 'seed');
-    const fill = (sel) => { sel.innerHTML = ''; seeds.forEach((id) => { const o = document.createElement('option'); o.value = id; o.textContent = `${ITEMS[id].name} (x${inv[id]})`; sel.appendChild(o); }); };
-    fill($('spliceA')); fill($('spliceB'));
-  }
+  // ---------- canvas inventory / hotbar ----------
+  drawCanvas(ctx, now) { this.canvasInventory.render(ctx, now); }
+  selectSlot(n) { this.canvasInventory.selectSlot(n); }
+  toggleDrawer() { this.canvasInventory.toggle(); }
+  hotbarItems() { return this.canvasInventory.hotbarItems(); }
+  inventoryTextState() { return this.canvasInventory.textState(); }
+  blocksGamePointer(x, y) { return this.canvasInventory.blocksPointer(x, y); }
 
   // ---------- shop (item packs + rare individuals) ----------
   _shopHeader(text) {
@@ -470,29 +417,6 @@ export class UI {
     $('menuBtn').classList.remove('open');
   }
 
-  // ---------- drawer drag (continuous height — drag the notch up/down) ----------
-  wireDrawer() {
-    const drawer = $('invDrawer'), notch = $('drawerNotch');
-    const MIN = 24, maxH = () => Math.round(window.innerHeight * 0.85);
-    let startY = null, startH = 0;
-    const setH = (h) => { drawer.style.height = Math.max(MIN, Math.min(maxH(), h)) + 'px'; };
-    notch.addEventListener('pointerdown', (e) => {
-      startY = e.clientY; startH = drawer.getBoundingClientRect().height;
-      try { notch.setPointerCapture(e.pointerId); } catch {}
-      e.preventDefault();
-    });
-    notch.addEventListener('pointermove', (e) => { if (startY != null) setH(startH + (startY - e.clientY)); });
-    const end = () => { startY = null; };
-    notch.addEventListener('pointerup', end);
-    notch.addEventListener('pointercancel', end);
-    this._setDrawerHeight = setH;
-  }
-  // keyboard E (desktop): toggle between just-the-hotbar and a tall inventory
-  toggleDrawer() {
-    const h = $('invDrawer').getBoundingClientRect().height;
-    if (this._setDrawerHeight) this._setDrawerHeight(h > 140 ? 94 : Math.round(window.innerHeight * 0.6));
-  }
-
   // ---------- developer status / settings ----------
   onDevStatus() {
     const isDev = !!this.game.me.dev;
@@ -581,7 +505,6 @@ export class UI {
     $('shopSearch').addEventListener('input', () => this.renderShop());
     $('shopCategory').addEventListener('change', () => this.renderShop());
 
-    $('spliceBtn').onclick = () => { const a = $('spliceA').value, b = $('spliceB').value; if (a && b) this.net.send('splice', { a, b }); };
     $('addAdminBtn').onclick = () => { const name = $('adminNameInput').value.trim(); if (name) { this.net.send('addAdmin', { name }); $('adminNameInput').value = ''; } };
 
     $('addTradeItem').onclick = () => {
@@ -640,14 +563,4 @@ function timeAgo(ts) {
   const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24); if (d < 30) return `${d}d ago`;
   const mo = Math.floor(d / 30); return mo < 12 ? `${mo}mo ago` : `${Math.floor(mo / 12)}y ago`;
-}
-
-// Fire `fn` on a double click / double tap of `el` (works for mouse and touch).
-function onDoubleTap(el, fn) {
-  let last = 0;
-  el.addEventListener('click', (e) => {
-    const now = Date.now();
-    if (now - last < 320) { last = 0; e.preventDefault(); fn(); }
-    else last = now;
-  });
 }
