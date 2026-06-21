@@ -78,7 +78,15 @@ export class UI {
       .filter((id) => this.game.me.inventory[id] > 0 && isPlaceable(id));
   }
   hotbarItems() {
-    return [...PERMANENT, ...this.placeableItems().slice(0, 9)];
+    const base = [...PERMANENT, ...this.placeableItems().slice(0, 9)];
+    // Always keep the currently-selected item usable, even if it's past the
+    // first 9 placeables — otherwise picking it from the inventory would snap
+    // the selection back to the fist and the item couldn't be placed.
+    const sel = this.game.selected;
+    if (sel && !base.includes(sel) && (PERMANENT.includes(sel) || this.placeableItems().includes(sel))) {
+      base.push(sel);
+    }
+    return base;
   }
   buildHotbar() {
     const bar = $('hotbar'); bar.innerHTML = '';
@@ -111,11 +119,11 @@ export class UI {
       const worn = clothing && this.game.me.equipped && this.game.me.equipped[slot] === id;
       const card = document.createElement('div');
       card.className = 'item-card' + (this.game.selected === id ? ' active' : '') + (worn ? ' worn' : '');
-      const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'tap to wear') : 'x' + inv[id]);
+      const tag = it.permanent ? 'tool' : (clothing ? (worn ? '✔ worn' : 'double-tap') : 'x' + inv[id]);
       card.innerHTML = `<div class="ic">${this.icon(id)}</div><div class="nm">${it.name}</div><div class="ct">${tag}</div>`;
       if (clothing) {
-        // a single tap (here in the inventory only) equips / unequips clothing
-        card.onclick = () => this.net.send('equip', { itemId: id });
+        // double-tap (here in the inventory only) equips / unequips clothing
+        onDoubleTap(card, () => this.net.send('equip', { itemId: id }));
       } else {
         card.onclick = () => { this.game.selected = id; this.buildHotbar(); this.renderInventory(); };
       }
@@ -553,3 +561,13 @@ function formatGems(gems) {
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// Fire `fn` on a double click / double tap of `el` (works for mouse and touch).
+function onDoubleTap(el, fn) {
+  let last = 0;
+  el.addEventListener('click', (e) => {
+    const now = Date.now();
+    if (now - last < 320) { last = 0; e.preventDefault(); fn(); }
+    else last = now;
+  });
+}
