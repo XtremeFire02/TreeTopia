@@ -16,7 +16,6 @@ import {
   ITEMS, spliceResult, rollDrops, rollHarvest, isSolid,
   PERMANENT, STARTER_CLOTHING, hasEffect, isPlaceable, isClothing, PACK_BY_ID,
 } from '../public/js/shared/items.js';
-import { CUSTOM_ITEMS } from '../public/js/shared/custom-items.js';
 
 const ACHIEVEMENTS = {
   break_first: 'Demolitionist — break your first block',
@@ -41,13 +40,17 @@ const SUPER_COOLDOWN = 10 * 60 * 1000; // SuperBroadcast cooldown
 const BROADCAST_REACH = 50;            // a Broadcast reaches this many random players
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-// Sprite Studio asset pipeline — write access is OFF unless STUDIO=1, so the
-// public game server never exposes file-writing endpoints.
-const STUDIO_ENABLED = process.env.STUDIO === '1';
+// Sprite Studio asset pipeline. The /studio editor is reachable on the live
+// server, but every write is gated by a secret key (revealed in-game to
+// developers via /studiokey). Custom items + their PNGs live in the persistent
+// data dir, so they survive deploys (which ship fresh release dirs).
 const STUDIO_HTML = path.join(__dirname, '..', 'tools', 'sprite-editor.html');
-const CUSTOM_DIR = path.join(PUBLIC, 'assets', 'custom');
-const CUSTOM_ITEMS_FILE = path.join(PUBLIC, 'js', 'shared', 'custom-items.js');
-const customStore = { ...CUSTOM_ITEMS };   // id -> definition (the editable layer)
+const CUSTOM_DATA = path.join(DATA, 'custom');
+const CUSTOM_ASSETS = path.join(CUSTOM_DATA, 'assets');
+const CUSTOM_ITEMS_JSON = path.join(CUSTOM_DATA, 'items.json');
+const STUDIO_KEY_FILE = path.join(CUSTOM_DATA, 'studio-key.txt');
+let studioKey = '';
+const customStore = {};   // id -> custom item definition (the editable layer)
 const DEV_ACCOUNT_NAME = '@XtremeFire';
 // The founder account is always a developer. Additional developers are granted
 // at runtime by an existing developer and persisted in developers.json.
@@ -79,6 +82,8 @@ const MIME = {
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
   if (url === '/studio' || url.startsWith('/api/studio/')) return handleStudio(req, res, url);
+  if (url === '/api/custom-items') return sendJson(res, 200, customStore);     // public: clients merge these
+  if (url.startsWith('/custom-assets/')) return serveCustomAsset(res, url);
 
   let p = url === '/' ? '/index.html' : url;
   const filePath = path.join(PUBLIC, path.normalize(p));
@@ -90,7 +95,9 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// ---------- Sprite Studio asset API (only when STUDIO=1) ----------
+// ---------- Sprite Studio asset API ----------
+// Custom items + assets live in the persistent data dir so they survive deploys.
+// Reads are public; writes require the secret studio key (see /studiokey in-game).
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
@@ -107,13 +114,30 @@ function writePngDataUrl(file, dataUrl) {
   fs.writeFileSync(file, Buffer.from(dataUrl.slice(i + 7), 'base64'));
   return true;
 }
-function persistCustomItems() {
-  const header =
-    '// Custom items created/edited in the Sprite Studio (tools/sprite-editor.html).\n' +
-    '// This file is rewritten automatically by the studio server — avoid editing by\n' +
-    '// hand. Each entry is a normal item definition merged over the built-in registry.\n' +
-    'export const CUSTOM_ITEMS = ';
-  fs.writeFileSync(CUSTOM_ITEMS_FILE, header + JSON.stringify(customStore, null, 2) + ';\n');
+function serveCustomAsset(res, url) {
+  const name = path.basename(url);
+  const f = path.join(CUSTOM_ASSETS, name);
+  if (!f.startsWith(CUSTOM_ASSETS)) { res.writeHead(403); return res.end('Forbidden'); }
+  fs.readFile(f, (err, buf) => {
+    if (err) { res.writeHead(404); return res.end('Not found'); }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' });
+    res.end(buf);
+  });
+}
+function initStudio() {
+  fs.mkdirSync(CUSTOM_ASSETS, { recursive: true });
+  try { studioKey = fs.readFileSync(STUDIO_KEY_FILE, 'utf8').trim(); } catch { studioKey = ''; }
+  if (!studioKey) { studioKey = crypto.randomBytes(6).toString('hex'); fs.writeFileSync(STUDIO_KEY_FILE, studioKey); }
+  try {
+    const saved = JSON.parse(fs.readFileSync(CUSTOM_ITEMS_JSON, 'utf8'));
+    for (const id in saved) { customStore[id] = saved[id]; ITEMS[id] = { ...(ITEMS[id] || {}), ...saved[id] }; }
+  } catch { /* none yet */ }
+}
+function persistCustomItems() { fs.writeFileSync(CUSTOM_ITEMS_JSON, JSON.stringify(customStore, null, 2)); }
+function studioOk(req) {
+  const key = (req.headers['x-studio-key'] || '').trim()
+    || (new URLSearchParams((req.url.split('?')[1] || '')).get('key') || '').trim();
+  return studioKey && key === studioKey;
 }
 function studioItemList() {
   return Object.values(ITEMS).map((it) => ({
@@ -124,19 +148,20 @@ function studioItemList() {
   })).sort((a, b) => Number(b.custom) - Number(a.custom) || a.id.localeCompare(b.id));
 }
 async function handleStudio(req, res, url) {
-  if (!STUDIO_ENABLED) return sendJson(res, 403, { error: 'Studio is disabled. Start the server with STUDIO=1 to enable asset editing.' });
-
   if (url === '/studio') {
     return fs.readFile(STUDIO_HTML, (err, buf) => {
       if (err) { res.writeHead(404); return res.end('studio html missing'); }
       res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(buf);
     });
   }
+  // every /api/studio/* call requires the secret key
+  if (!studioOk(req)) return sendJson(res, 403, { error: 'A valid studio key is required.', needKey: true });
+
   if (url === '/api/studio/items' && req.method === 'GET') return sendJson(res, 200, { items: studioItemList() });
 
   if (url === '/api/studio/source' && req.method === 'GET') {
-    const id = (req.url.split('?')[1] || '').replace(/^id=/, '');
-    const f = path.join(CUSTOM_DIR, id + '.studio.json');
+    const id = (new URLSearchParams(req.url.split('?')[1] || '')).get('id') || '';
+    const f = path.join(CUSTOM_ASSETS, path.basename(id) + '.studio.json');
     return fs.readFile(f, 'utf8', (err, txt) => err ? sendJson(res, 404, { error: 'no source' }) : sendJson(res, 200, JSON.parse(txt)));
   }
 
@@ -146,14 +171,14 @@ async function handleStudio(req, res, url) {
     const id = String(def.id || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     if (!id) return sendJson(res, 400, { error: 'A valid id (letters, numbers, _) is required.' });
     try {
-      fs.mkdirSync(CUSTOM_DIR, { recursive: true });
-      writePngDataUrl(path.join(CUSTOM_DIR, id + '.png'), body.iconPng);          // first frame (icon + static draw)
-      def.sprite = `assets/custom/${id}.png`;
+      fs.mkdirSync(CUSTOM_ASSETS, { recursive: true });
+      writePngDataUrl(path.join(CUSTOM_ASSETS, id + '.png'), body.iconPng);     // first frame (icon + static draw)
+      def.sprite = `/custom-assets/${id}.png`;
       if ((def.frames || 1) > 1 && body.sheetPng) {
-        writePngDataUrl(path.join(CUSTOM_DIR, id + '_sheet.png'), body.sheetPng);
-        def.sheet = `assets/custom/${id}_sheet.png`;
+        writePngDataUrl(path.join(CUSTOM_ASSETS, id + '_sheet.png'), body.sheetPng);
+        def.sheet = `/custom-assets/${id}_sheet.png`;
       } else { delete def.sheet; }
-      if (body.studio) fs.writeFileSync(path.join(CUSTOM_DIR, id + '.studio.json'), JSON.stringify(body.studio));
+      if (body.studio) fs.writeFileSync(path.join(CUSTOM_ASSETS, id + '.studio.json'), JSON.stringify(body.studio));
       def.id = id;
       customStore[id] = def;
       ITEMS[id] = { ...(ITEMS[id] || {}), ...def };   // hot-apply to the running game
@@ -168,7 +193,7 @@ async function handleStudio(req, res, url) {
     if (!customStore[id]) return sendJson(res, 400, { error: 'Only custom items can be deleted.' });
     delete customStore[id];
     delete ITEMS[id];
-    for (const ext of ['.png', '_sheet.png', '.studio.json']) { try { fs.unlinkSync(path.join(CUSTOM_DIR, id + ext)); } catch { /* ok */ } }
+    for (const ext of ['.png', '_sheet.png', '.studio.json']) { try { fs.unlinkSync(path.join(CUSTOM_ASSETS, id + ext)); } catch { /* ok */ } }
     persistCustomItems();
     return sendJson(res, 200, { ok: true });
   }
@@ -910,7 +935,15 @@ const COMMANDS = {
   gameunban:  { scope: 'dev',   run: (p, name) => cmdGameUnban(p, name) },
   worldban:   { scope: 'dev',   run: (p, name) => cmdWorldBan(p, name, Infinity) },
   deleteworld:{ scope: 'dev',   run: (p) => cmdDeleteWorld(p) },
+  studiokey:  { scope: 'dev',   run: (p) => cmdStudioKey(p) },
 };
+
+// Reveal the Sprite Studio key to a developer so they (or a collaborator) can
+// log into /studio and edit game assets.
+function cmdStudioKey(p) {
+  toPlayer(p, 'notify', { text: `Sprite Studio key: ${studioKey}` });
+  worldNotif(p.world, { kind: 'event', text: `Studio: open /studio and enter key ${studioKey}` });
+}
 
 function isWorldOwner(p) {
   const w = worlds.get(p.world);
@@ -1228,6 +1261,8 @@ setInterval(() => {
   }
 }, 30000);
 
+initStudio();
 server.listen(PORT, HOST, () => {
-  console.log(`\n  🌱 Growtopia Clone running:  http://${HOST}:${PORT}\n`);
+  console.log(`\n  🌱 Growtopia Clone running:  http://${HOST}:${PORT}`);
+  console.log(`  🎨 Sprite Studio:            /studio  (key in-game via /studiokey)\n`);
 });

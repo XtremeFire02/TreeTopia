@@ -99,10 +99,10 @@
       <input type="color" id="color" value="#7a4a23" />
       <div class="swatches" id="swatches"></div>
 
-      <h3>Game library <small class="dot off" id="libStatus">○ offline</small></h3>
+      <h3>Game library <small class="dot off" id="libStatus" title="Click to enter the studio key">○ offline</small></h3>
       <input type="text" id="libSearch" placeholder="Search game items…" />
       <div id="library" class="library"></div>
-      <div class="hint" id="libHint">Open this editor at <b>/studio</b> on a server started with <b>STUDIO=1</b> to load, edit and delete real game items.</div>
+      <div class="hint" id="libHint">Open this editor at <b>/studio</b> on the game server, then click the status above and enter the <b>studio key</b> (a developer gets it in-game with <b>/studiokey</b>) to load, edit, price and delete real game items.</div>
     </div>
 
     <!-- CENTER: canvas + frames -->
@@ -463,8 +463,18 @@
   $('copyBtn').onclick = ()=>{ const t=exportText(); $('io').value=t; $('io').select(); try{ navigator.clipboard.writeText(t); }catch(e){} };
   $('loadBtn').onclick = ()=>{ if($('io').value.trim()) loadText($('io').value); };
 
-  // ---------- game integration (only when served at /studio with STUDIO=1) ----------
+  // ---------- game integration (open this editor at /studio on the game server) ----------
   let connected=false, allItems=[];
+  let studioKey = ''; try{ studioKey = localStorage.getItem('tt_studio_key')||''; }catch(_){}
+  function setKey(k){ studioKey=(k||'').trim(); try{ localStorage.setItem('tt_studio_key', studioKey); }catch(_){} }
+  function promptKey(){ const k=prompt('Enter the Sprite Studio key (a developer can get it in-game with /studiokey):', studioKey||''); if(k!=null){ setKey(k); return true; } return false; }
+  // fetch helper that attaches the key and re-prompts once on an auth failure
+  async function sfetch(url, opts={}, retried){
+    opts.headers = Object.assign({}, opts.headers, { 'x-studio-key': studioKey });
+    const r = await fetch(url, opts);
+    if(r.status===403 && !retried){ if(promptKey()) return sfetch(url, opts, true); }
+    return r;
+  }
   function rgbHex(r,g,b){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
   function sheetCanvas(){ const c=document.createElement('canvas'); c.width=W*frames.length; c.height=H; const x=c.getContext('2d'); frames.forEach((g,fi)=>x.drawImage(frameToCanvas(g),fi*W,0)); return c; }
 
@@ -476,7 +486,7 @@
   }
   async function refreshLibrary(){
     try{
-      const r=await fetch('api/studio/items'); if(!r.ok) throw 0;
+      const r=await sfetch('api/studio/items'); if(!r.ok) throw 0;
       const j=await r.json(); allItems=j.items||[]; setConn(true); renderLibrary();
     }catch(_){ setConn(false); }
   }
@@ -499,7 +509,7 @@
   async function loadItemForEdit(it){
     // custom items keep an exact, round-trippable source; built-ins are sampled from their PNG
     if(it.custom){
-      try{ const r=await fetch('api/studio/source?id='+encodeURIComponent(it.id)); if(r.ok){ const j=await r.json(); if(j.text){ loadText(j.text); } } }catch(_){ }
+      try{ const r=await sfetch('api/studio/source?id='+encodeURIComponent(it.id)); if(r.ok){ const j=await r.json(); if(j.text){ loadText(j.text); } } }catch(_){ }
     } else {
       const url = (it.sheet && it.frames>1) ? it.sheet : it.sprite;
       if(url) await sampleImageToFrames(url, it.frames>1?it.frames:1);
@@ -538,6 +548,7 @@
   }
   $('gtype').onchange=syncTypeFields;
   $('libSearch').oninput=renderLibrary;
+  $('libStatus').onclick=()=>{ if(promptKey()) refreshLibrary(); };
   function setSaveStatus(t,bad){ const e=$('saveStatus'); e.textContent=t; e.style.color=bad?'#ff9b9b':'var(--muted)'; }
 
   async function saveToGame(){
@@ -554,7 +565,7 @@
     const body={ def, iconPng: frameToCanvas(frames[0]).toDataURL('image/png'), sheetPng: frames.length>1? sheetCanvas().toDataURL('image/png'):null, studio:{ text: exportText() } };
     setSaveStatus('Saving…');
     try{
-      const r=await fetch('api/studio/save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      const r=await sfetch('api/studio/save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       const j=await r.json();
       if(!r.ok){ setSaveStatus(j.error||'Save failed.',true); return; }
       setSaveStatus('✔ Saved "'+id+'". Reload the game to see it (refresh the page / re-enter a world).');
@@ -564,7 +575,7 @@
   $('saveGameBtn').onclick=saveToGame;
   async function delItem(id){
     if(!confirm('Delete custom item "'+id+'"? This removes its sprite and definition.')) return;
-    try{ const r=await fetch('api/studio/delete',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    try{ const r=await sfetch('api/studio/delete',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
       const j=await r.json(); if(!r.ok){ setSaveStatus(j.error||'Delete failed.',true); return; }
       setSaveStatus('Deleted "'+id+'".'); await refreshLibrary();
     }catch(e){ setSaveStatus('Delete failed: '+e,true); }

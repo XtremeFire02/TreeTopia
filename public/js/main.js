@@ -5,8 +5,30 @@ import { Game } from './game.js';
 import { initInput } from './input.js';
 import { initTouch } from './touch.js';
 import { preloadPlayer } from './assets.js';
+import { ITEMS } from './shared/items.js';
+import { resolveServerUrl } from './net.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Custom items designed in the Sprite Studio live on the server (persistent data
+// dir), so we fetch + merge them into the registry before the game renders. The
+// HTTP base is derived from the WebSocket server URL so the packaged apps work.
+async function loadCustomItems() {
+  let base = '';
+  try { base = resolveServerUrl().replace(/^ws/, 'http').replace(/\/$/, ''); } catch { base = ''; }
+  try {
+    const r = await fetch(base + '/api/custom-items');
+    if (!r.ok) return;
+    const data = await r.json();
+    for (const id in data) {
+      const def = { ...data[id] };
+      for (const k of ['sprite', 'sheet']) {
+        if (def[k] && !/^https?:/i.test(def[k])) def[k] = base + (def[k][0] === '/' ? '' : '/') + def[k];
+      }
+      ITEMS[id] = { ...(ITEMS[id] || {}), ...def };
+    }
+  } catch { /* offline or none — game still works with built-in items */ }
+}
 const net = new Net();
 const ui = new UI(net);
 const game = new Game(net, ui);
@@ -164,6 +186,7 @@ game.canvas.addEventListener('wheel', (e) => {
   ui.showAuthError('Connecting to the game server...');
   try {
     await net.connect();
+    await loadCustomItems();   // merge studio-made items before any UI renders
     setAuthButtons(true);
     $('authError').classList.add('hidden');
     // remember-me: pre-fill saved credentials, and auto-login unless we just
