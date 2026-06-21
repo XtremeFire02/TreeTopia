@@ -20,6 +20,7 @@
 //   hazard    'lava' | 'spike' — touching it kills the player
 
 import { PACK_ITEMS } from './pack-items.js';
+import { CUSTOM_ITEMS } from './custom-items.js';
 
 export const ITEMS = {
   // ---- currency ----
@@ -176,6 +177,10 @@ for (const k in ITEMS) if (ITEMS[k].type === 'seed') ITEMS[k].sprite = 'assets/i
 if (ITEMS.lava) ITEMS.lava.hazard = 'lava';
 // merge — core gameplay items take precedence over pack duplicates
 for (const k in PACK_ITEMS) if (!ITEMS[k]) ITEMS[k] = PACK_ITEMS[k];
+
+// Sprite Studio custom items — merged last so they can add new items OR
+// override the sprite/props of an existing one.
+for (const k in CUSTOM_ITEMS) ITEMS[k] = { ...(ITEMS[k] || {}), ...CUSTOM_ITEMS[k] };
 
 // helper to build a seed definition
 function seed(blockId, price, growTime) {

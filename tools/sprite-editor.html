@@ -54,6 +54,17 @@
   .frame:hover .fdel{ display:block; }
   .frame-add{ width:54px; height:54px; border:2px dashed rgba(255,255,255,.25); border-radius:8px; background:none; color:var(--muted); font-size:24px; cursor:pointer; }
   .frame-add:hover{ border-color:var(--accent); color:var(--accent); }
+  /* game library */
+  .library{ display:flex; flex-direction:column; gap:4px; max-height:240px; overflow-y:auto; margin-top:6px; }
+  .lib-row{ display:flex; align-items:center; gap:8px; padding:5px 7px; background:var(--panel2); border:1px solid rgba(255,255,255,.08); border-radius:8px; cursor:pointer; font-size:13px; }
+  .lib-row:hover{ background:#3a4a66; }
+  .lib-row img{ width:20px; height:20px; image-rendering:pixelated; background:#11161f; border-radius:3px; }
+  .lib-row .ln{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lib-row .lt{ font-size:10px; color:var(--muted); }
+  .lib-row .lx{ background:var(--danger); color:#fff; border:none; border-radius:5px; cursor:pointer; padding:2px 7px; font-size:12px; }
+  .badge{ font-size:10px; padding:0 5px; border-radius:6px; background:#2b5fa6; color:#fff; }
+  small.dot{ font-weight:400; letter-spacing:0; text-transform:none; margin-left:6px; }
+  small.dot.on{ color:var(--accent); } small.dot.off{ color:var(--muted); }
 </style>
 </head>
 <body>
@@ -87,6 +98,11 @@
       <h3>Colour</h3>
       <input type="color" id="color" value="#7a4a23" />
       <div class="swatches" id="swatches"></div>
+
+      <h3>Game library <small class="dot off" id="libStatus">○ offline</small></h3>
+      <input type="text" id="libSearch" placeholder="Search game items…" />
+      <div id="library" class="library"></div>
+      <div class="hint" id="libHint">Open this editor at <b>/studio</b> on a server started with <b>STUDIO=1</b> to load, edit and delete real game items.</div>
     </div>
 
     <!-- CENTER: canvas + frames -->
@@ -128,7 +144,35 @@
       <h3>Asset name</h3>
       <input type="text" id="name" value="myblock" />
 
-      <h3>Export</h3>
+      <h3>Add to game</h3>
+      <label class="field">Item id (unique, a–z 0–9 _)</label>
+      <input type="text" id="gid" placeholder="auto from name" />
+      <div class="inline"><span>Type</span>
+        <select id="gtype" class="btn small" style="width:auto;margin:0">
+          <option value="block">block</option>
+          <option value="seed">seed</option>
+          <option value="clothing">clothing</option>
+          <option value="special">special</option>
+          <option value="effect">effect</option>
+          <option value="lock">lock</option>
+        </select>
+      </div>
+      <label class="field">Shop category (blank = none)</label>
+      <input type="text" id="gcat" placeholder="e.g. Custom" />
+      <div class="inline"><span>Price 💎 (blank = not sold)</span><input type="number" id="gprice" min="0" step="1" style="width:80px"></div>
+      <div id="blockProps">
+        <div class="inline"><span>Solid (blocks movement)</span><input type="checkbox" id="gsolid" checked></div>
+        <div class="inline"><span>Hardness (hits)</span><input type="number" id="ghard" min="1" value="4" style="width:70px"></div>
+      </div>
+      <div class="inline" id="slotRow" style="display:none"><span>Wear slot</span>
+        <select id="gslot" class="btn small" style="width:auto;margin:0">
+          <option>wings</option><option>shirt</option><option>pants</option><option>scarf</option><option>shoes</option><option>pet</option>
+        </select>
+      </div>
+      <button class="btn go" id="saveGameBtn" disabled>💾 Save to game</button>
+      <div class="hint" id="saveStatus"></div>
+
+      <h3>Export files</h3>
       <div class="row">
         <button class="btn small go" id="pngFrameBtn">⬇️ This frame PNG</button>
         <button class="btn small go" id="pngSheetBtn">⬇️ Sprite sheet</button>
@@ -419,11 +463,119 @@
   $('copyBtn').onclick = ()=>{ const t=exportText(); $('io').value=t; $('io').select(); try{ navigator.clipboard.writeText(t); }catch(e){} };
   $('loadBtn').onclick = ()=>{ if($('io').value.trim()) loadText($('io').value); };
 
+  // ---------- game integration (only when served at /studio with STUDIO=1) ----------
+  let connected=false, allItems=[];
+  function rgbHex(r,g,b){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+  function sheetCanvas(){ const c=document.createElement('canvas'); c.width=W*frames.length; c.height=H; const x=c.getContext('2d'); frames.forEach((g,fi)=>x.drawImage(frameToCanvas(g),fi*W,0)); return c; }
+
+  function setConn(on){
+    connected=on;
+    const s=$('libStatus'); s.textContent = on?'● connected':'○ offline'; s.className='dot '+(on?'on':'off');
+    $('saveGameBtn').disabled = !on;
+    $('libHint').style.display = on?'none':'block';
+  }
+  async function refreshLibrary(){
+    try{
+      const r=await fetch('api/studio/items'); if(!r.ok) throw 0;
+      const j=await r.json(); allItems=j.items||[]; setConn(true); renderLibrary();
+    }catch(_){ setConn(false); }
+  }
+  function renderLibrary(){
+    const q=($('libSearch').value||'').toLowerCase().trim();
+    const box=$('library'); box.innerHTML='';
+    allItems.filter(it=> !q || it.id.includes(q) || (it.name||'').toLowerCase().includes(q)).slice(0,300).forEach(it=>{
+      const row=document.createElement('div'); row.className='lib-row';
+      const img=document.createElement('img'); if(it.sprite) img.src=it.sprite; else { img.style.visibility='hidden'; }
+      const nm=document.createElement('div'); nm.className='ln'; nm.innerHTML=(it.name||it.id)+'<div class="lt">'+it.id+' · '+it.type+(it.frames>1?(' · '+it.frames+'f'):'')+'</div>';
+      row.appendChild(img); row.appendChild(nm);
+      if(it.custom){ const b=document.createElement('span'); b.className='badge'; b.textContent='custom'; row.appendChild(b);
+        const x=document.createElement('button'); x.className='lx'; x.textContent='✕'; x.title='Delete'; x.onclick=(e)=>{ e.stopPropagation(); delItem(it.id); }; row.appendChild(x);
+      }
+      row.onclick=()=> loadItemForEdit(it);
+      box.appendChild(row);
+    });
+    if(!box.children.length) box.innerHTML='<div class="hint">No matching items.</div>';
+  }
+  async function loadItemForEdit(it){
+    // custom items keep an exact, round-trippable source; built-ins are sampled from their PNG
+    if(it.custom){
+      try{ const r=await fetch('api/studio/source?id='+encodeURIComponent(it.id)); if(r.ok){ const j=await r.json(); if(j.text){ loadText(j.text); } } }catch(_){ }
+    } else {
+      const url = (it.sheet && it.frames>1) ? it.sheet : it.sprite;
+      if(url) await sampleImageToFrames(url, it.frames>1?it.frames:1);
+    }
+    // fill the game-item fields from the registry entry
+    $('gid').value=it.id; $('name').value=it.name||it.id;
+    $('gtype').value=['block','seed','clothing','special','effect','lock'].includes(it.type)?it.type:'special';
+    $('gcat').value=it.category||''; $('gprice').value=(it.price==null?'':it.price);
+    if(it.slot){ $('gslot').value=it.slot; }
+    syncTypeFields();
+    setSaveStatus('Loaded "'+it.id+'" — edit then Save to game.');
+  }
+  function sampleImageToFrames(url, nframes){
+    return new Promise(res=>{
+      const img=new Image(); img.crossOrigin='anonymous';
+      img.onload=()=>{
+        const fw=Math.floor(img.naturalWidth/nframes)||img.naturalWidth;
+        const c=document.createElement('canvas'); c.width=16; c.height=16; const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
+        const nf=[];
+        for(let f=0;f<nframes;f++){
+          x.clearRect(0,0,16,16); x.drawImage(img, f*fw,0,fw,img.naturalHeight, 0,0,16,16);
+          let data; try{ data=x.getImageData(0,0,16,16).data; }catch(_){ data=null; }
+          const g=blank();
+          if(data) for(let y=0;y<16;y++)for(let xx=0;xx<16;xx++){ const o=(y*16+xx)*4; if(data[o+3]>=128) g[y][xx]=rgbHex(data[o],data[o+1],data[o+2]); }
+          nf.push(g);
+        }
+        frames=nf; af=0; layout(); render(); buildFrames(); res();
+      };
+      img.onerror=()=>res(); img.src=url;
+    });
+  }
+  function syncTypeFields(){
+    const t=$('gtype').value;
+    $('blockProps').style.display = (t==='block'||t==='special')?'block':'none';
+    $('slotRow').style.display = (t==='clothing')?'flex':'none';
+  }
+  $('gtype').onchange=syncTypeFields;
+  $('libSearch').oninput=renderLibrary;
+  function setSaveStatus(t,bad){ const e=$('saveStatus'); e.textContent=t; e.style.color=bad?'#ff9b9b':'var(--muted)'; }
+
+  async function saveToGame(){
+    if(!connected) return;
+    const id=( $('gid').value || $('name').value ).toLowerCase().replace(/[^a-z0-9_]/g,'');
+    if(!id){ setSaveStatus('Enter an item id first.',true); return; }
+    const type=$('gtype').value;
+    const def={ id, name:$('name').value||id, type, icon:'🧩', frames:frames.length, frameMs };
+    const cat=$('gcat').value.trim(); if(cat) def.category=cat;
+    const price=$('gprice').value.trim(); if(price!=='') def.price=Math.max(0,+price|0);
+    if(type==='block'||type==='special'){ def.solid=$('gsolid').checked; def.hardness=Math.max(1,+$('ghard').value||4); def.drops={ block:id, gemMin:0, gemMax:2 }; }
+    if(type==='seed'){ def.icon='🌱'; }
+    if(type==='clothing'){ def.slot=$('gslot').value; }
+    const body={ def, iconPng: frameToCanvas(frames[0]).toDataURL('image/png'), sheetPng: frames.length>1? sheetCanvas().toDataURL('image/png'):null, studio:{ text: exportText() } };
+    setSaveStatus('Saving…');
+    try{
+      const r=await fetch('api/studio/save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      const j=await r.json();
+      if(!r.ok){ setSaveStatus(j.error||'Save failed.',true); return; }
+      setSaveStatus('✔ Saved "'+id+'". Reload the game to see it (refresh the page / re-enter a world).');
+      await refreshLibrary();
+    }catch(e){ setSaveStatus('Save failed: '+e,true); }
+  }
+  $('saveGameBtn').onclick=saveToGame;
+  async function delItem(id){
+    if(!confirm('Delete custom item "'+id+'"? This removes its sprite and definition.')) return;
+    try{ const r=await fetch('api/studio/delete',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+      const j=await r.json(); if(!r.ok){ setSaveStatus(j.error||'Delete failed.',true); return; }
+      setSaveStatus('Deleted "'+id+'".'); await refreshLibrary();
+    }catch(e){ setSaveStatus('Delete failed: '+e,true); }
+  }
+
   // ---------- boot ----------
   buildSwatches(); selectSwatch();
   onionRef=ONION[$('assetType').value];
-  layout(); render(); buildFrames();
+  layout(); render(); buildFrames(); syncTypeFields();
   requestAnimationFrame(tick);
+  refreshLibrary();
 })();
 </script>
 </body>

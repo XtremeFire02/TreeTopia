@@ -30,6 +30,18 @@ export function tileSprite(id) {
   return ready(i) ? i : null;
 }
 
+// Animated sprite sheet (a horizontal strip of 16×16 frames) for custom items
+// that declare `sheet` + `frames`. Cached separately from the single icon sprite.
+const sheets = {};
+export function sheetSprite(id) {
+  if (!(id in sheets)) {
+    const it = ITEMS[id];
+    sheets[id] = it && it.sheet ? load(it.sheet) : null;
+  }
+  const i = sheets[id];
+  return ready(i) ? i : null;
+}
+
 // drops draw the same sprite as the block/item they represent
 export const dropSprite = tileSprite;
 

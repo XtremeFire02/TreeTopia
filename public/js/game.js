@@ -6,7 +6,7 @@ import {
 import { ITEMS, isSolid, hasEffect, hasEquippedEffect, isPlaceable } from './shared/items.js';
 import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE } from './shared/names.js';
 import { keys, mouse } from './input.js';
-import { tileSprite, dropSprite } from './assets.js';
+import { tileSprite, dropSprite, sheetSprite } from './assets.js';
 import { playJump, playPunch } from './sfx.js';
 
 export class Game {
@@ -508,6 +508,18 @@ export class Game {
   drawTile(ctx, id, x, y, data, now) {
     // tree (planted seed)
     if (id === '__tree__') return this.drawTree(ctx, x, y, data, now);
+
+    // animated custom items: a horizontal sprite sheet of 16×16 frames
+    const it0 = ITEMS[id];
+    if (it0 && it0.frames > 1 && it0.sheet) {
+      const sheet = sheetSprite(id);
+      if (sheet) {
+        const fw = Math.max(1, Math.floor(sheet.naturalWidth / it0.frames));
+        const fi = Math.floor(now / (it0.frameMs || 500)) % it0.frames;
+        ctx.drawImage(sheet, fi * fw, 0, fw, sheet.naturalHeight, x, y, TILE, TILE);
+        return;
+      }
+    }
 
     // sprite-backed tiles (original pixel art for core blocks + the pack catalog)
     const sp = tileSprite(id);
