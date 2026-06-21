@@ -2,6 +2,7 @@
 // admin, player profiles (wrench), chat, toasts, account login.
 import { ITEMS, shopCatalog, PACKS, SHOP_INDIVIDUAL, PERMANENT, isPlaceable } from './shared/items.js';
 import { CUSTOM_ITEMS } from './shared/custom-items.js';
+import { loadCustomItems } from './custom.js';
 import { iconUrl } from './assets.js';
 import { setTyping } from './input.js';
 
@@ -502,7 +503,11 @@ export class UI {
 
   // ---------- static buttons ----------
   wireStaticButtons() {
-    $('shopBtn').onclick = () => { this.renderShop(); this.openModal('shopModal'); };
+    $('shopBtn').onclick = async () => {
+      this.renderShop(); this.openModal('shopModal');
+      await loadCustomItems();   // pick up items saved in the studio since boot
+      this.renderShop();
+    };
     $('adminBtn').onclick = () => { this.renderAdmin(); this.openModal('adminModal'); };
     $('devBtn').onclick = () => this.openDevPanel();
     $('grantDevBtn').onclick = () => {
