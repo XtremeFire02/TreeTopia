@@ -10,16 +10,24 @@ export function resolveServerUrl() {
     if (q) return q;
   } catch { /* location.search may be unavailable in some shells */ }
 
-  // 2) web build: connect back to whatever host served the page
+  // 2) packaged apps (Capacitor / Tauri) serve their pages from a local scheme
+  // (e.g. http://localhost), so the page host is NOT the game server — they must
+  // use the explicitly configured SERVER_URL.
+  const cap = (typeof window !== 'undefined') ? window.Capacitor : null;
+  const isNative = !!((cap && (cap.isNativePlatform ? cap.isNativePlatform() : cap.platform && cap.platform !== 'web'))
+    || (typeof window !== 'undefined' && window.__TAURI__));
+  if (isNative && SERVER_URL) return SERVER_URL;
+
+  // 3) web build: connect back to whatever host served the page
   if (location.protocol === 'http:' || location.protocol === 'https:') {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}`;
   }
 
-  // 3) explicitly configured server (required by the iOS/Android/desktop apps)
+  // 4) explicitly configured server (desktop apps loaded from file:// etc.)
   if (SERVER_URL) return SERVER_URL;
 
-  // 4) packaged app loaded from file:// / capacitor:// / tauri:// with no URL set
+  // 5) nothing to connect to
   throw new Error('No game server configured — set SERVER_URL in js/config.js.');
 }
 
