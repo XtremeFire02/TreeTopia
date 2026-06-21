@@ -461,9 +461,11 @@ export class Game {
     if (!this.local.dead) {
       const tinfo = this.treeUnderPlayer();
       if (tinfo) {
+        const block = ITEMS[tinfo.seed] && ITEMS[tinfo.seed].seedOf;
+        const typeName = ((block && ITEMS[block] && ITEMS[block].name) || 'Mystery') + ' Tree';
         const secs = Math.ceil(tinfo.left / 1000);
-        const label = `🌱 ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} left`;
-        this.drawBubble(ctx, this.local.x - camX, this.local.y - camY - 66, label);
+        const time = secs < 60 ? `${secs}s left` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} left`;
+        this.drawBubble(ctx, this.local.x - camX, this.local.y - camY - 70, [`🌱 ${typeName}`, time]);
       }
     }
 
@@ -474,13 +476,18 @@ export class Game {
   }
 
   drawBubble(ctx, x, y, text) {
+    const lines = Array.isArray(text) ? text : [text];
     ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const w = ctx.measureText(text).width + 18, h = 22;
+    const lineH = 15;
+    const tw = Math.max(...lines.map((s) => ctx.measureText(s).width));
+    const w = tw + 18, h = 8 + lines.length * lineH;
     ctx.fillStyle = 'rgba(18,24,34,.94)'; ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1;
     roundRect(ctx, x - w / 2, y - h / 2, w, h, 8); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(x - 5, y + h / 2 - 1); ctx.lineTo(x + 5, y + h / 2 - 1); ctx.lineTo(x, y + h / 2 + 6);
     ctx.closePath(); ctx.fillStyle = 'rgba(18,24,34,.94)'; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillText(text, x, y);
+    ctx.fillStyle = '#fff';
+    const startY = y - (lines.length - 1) * lineH / 2;
+    lines.forEach((s, i) => ctx.fillText(s, x, startY + i * lineH));
   }
 
   drawTile(ctx, id, x, y, data, now) {

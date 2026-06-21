@@ -116,28 +116,37 @@ input:focus, select:focus { border-color: var(--accent2); }
 .slot .count { position: absolute; bottom: 2px; right: 4px; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
 .slot .key { position: absolute; top: 2px; left: 4px; font-size: 10px; color: var(--muted); }
 
-/* chat */
-#chatBox { position: absolute; bottom: 84px; left: 14px; width: 300px; }
-#chatLog { max-height: 150px; overflow-y: auto; font-size: 13px; margin-bottom: 6px; }
-#chatLog div { background: rgba(20,26,37,.55); padding: 3px 8px; border-radius: 6px; margin-top: 3px; }
-#chatLog .cname { color: var(--accent); font-weight: 600; }
-#chatLog .cname.dev-name, .dev-name {
+.dev-name {
   color: #b8860b !important;
   font-weight: 800;
   text-shadow: 0 1px 0 #2b1d00, 0 0 8px rgba(184,134,11,.35);
 }
-#chatLog .sys { color: var(--gold); font-style: italic; }
-.chat-row { display: flex; gap: 6px; align-items: stretch; }
-#chatInput { width: 100%; opacity: .5; transition: opacity .15s; margin: 0; }
-#chatInput:focus { opacity: 1; }
-#chatSend {
-  display: none; flex: 0 0 auto; width: 44px; border: none; border-radius: 9px; cursor: pointer;
-  background: var(--accent2); color: #fff; font-size: 18px; line-height: 1;
+
+/* global notification bar (top, drag the handle down for history) */
+#notifBar {
+  position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+  width: min(560px, 96vw); height: 40px; min-height: 14px; max-height: 70vh;
+  display: flex; flex-direction: column; z-index: 19; overflow: hidden;
+  background: rgba(18,24,34,.92); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 0 0 14px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
 }
-#chatSend:active { filter: brightness(1.1); }
-/* on touch there is no Enter key, so always show the Send button + a tappable box */
-body.touch #chatSend { display: block; }
-body.touch #chatInput { opacity: .9; }
+#notifScroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 10px; display: flex; flex-direction: column; gap: 4px; }
+#notifHandle { flex: 0 0 auto; display: flex; justify-content: center; padding: 3px 0 5px; cursor: grab; touch-action: none; }
+#notifHandle:active { cursor: grabbing; }
+.notif { font-size: 13px; line-height: 1.3; padding: 4px 8px; border-radius: 7px; background: rgba(255,255,255,.04); word-break: break-word; }
+.notif .who { font-weight: 700; }
+.notif.world .who { color: var(--accent); }
+.notif.broadcast { background: rgba(58,123,213,.16); }
+.notif.broadcast .tag { color: #7fb0ff; font-weight: 700; }
+.notif.super { background: rgba(242,197,49,.16); border: 1px solid rgba(242,197,49,.4); }
+.notif.super .tag { color: var(--gold); font-weight: 800; }
+.notif.event { color: var(--muted); font-style: italic; }
+.notif-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 2px; }
+
+/* compose modal */
+.compose-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.compose-btns .big-btn { flex: 1; min-width: 90px; }
+.big-btn.super { background: linear-gradient(180deg, #f2c531, #d9a814); color: #1b2330; }
 
 #controls {
   position: absolute; bottom: 78px; right: 14px; font-size: 11px; color: var(--muted);
@@ -225,7 +234,7 @@ body.touch #chatInput { opacity: .9; }
 #drawerNotch { flex: 0 0 auto; display: flex; justify-content: center; padding: 7px 0 5px; cursor: grab; touch-action: none; }
 #drawerNotch:active { cursor: grabbing; }
 .notch-bar { width: 64px; height: 6px; border-radius: 4px; background: rgba(255,255,255,.45); }
-#drawerScroll { flex: 1 1 auto; overflow-y: auto; padding: 0 14px 10px; }
+#drawerScroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; padding: 0 14px 10px; }
 .drawer-title { margin: 6px 0 8px; }
 #hotbar {
   position: static; transform: none; background: none; border: none;
@@ -301,8 +310,7 @@ body.touch #chatInput { opacity: .9; }
 /* tweaks applied only when the device is touch-driven */
 body.touch #controls { display: none; }                 /* keyboard help is irrelevant */
 body.touch #canvas { cursor: default; }
-body.touch #chatBox { bottom: auto; top: 54px; left: 8px; width: min(58vw, 240px); }
-body.touch #chatLog { max-height: 84px; }
+body.touch #notifBar { top: 50px; }
 
 body.touch #invDrawer { width: min(520px, 96vw); }
 body.touch #drawerNotch { padding: 6px 0 4px; }

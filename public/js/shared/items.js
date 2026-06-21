@@ -193,13 +193,17 @@ function titleCase(s) {
 
 // ---- splicing recipes ----
 // Combine two seeds to discover a new seed. Key is the two seed ids sorted & joined.
+// A connected tree: everything is reachable starting from dirt + grass seeds
+// (the only seeds you can get from the starting world).
 export const SPLICE_RECIPES = {
-  [key('dirt_seed', 'rock_seed')]: 'brick_seed',
-  [key('sand_seed', 'lava_seed')]: 'glass_seed',
-  [key('wood_seed', 'grass_seed')]: 'leaves_seed',
-  [key('rock_seed', 'lava_seed')]: 'gold_seed',
   [key('dirt_seed', 'grass_seed')]: 'sand_seed',
-  [key('grass_seed', 'rock_seed')]: 'wood_seed',
+  [key('dirt_seed', 'sand_seed')]: 'rock_seed',
+  [key('grass_seed', 'sand_seed')]: 'wood_seed',
+  [key('rock_seed', 'sand_seed')]: 'glass_seed',
+  [key('grass_seed', 'wood_seed')]: 'leaves_seed',
+  [key('rock_seed', 'wood_seed')]: 'brick_seed',
+  [key('glass_seed', 'rock_seed')]: 'lava_seed',
+  [key('lava_seed', 'rock_seed')]: 'gold_seed',
 };
 
 export function spliceResult(a, b) {

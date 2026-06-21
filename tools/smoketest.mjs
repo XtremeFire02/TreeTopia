@@ -83,13 +83,13 @@ const RID = Math.random().toString(36).slice(2, 7);
   const r = await removal;
   ok(r && r.x === px && r.y === py && r.fg === '', 'dirt block breaks after enough hits');
 
-  // --- buy a rock seed, then splice with a dirt seed -> brick seed ---
-  a.send('buy', { itemId: 'rock_seed', qty: 1 });
+  // --- buy a grass seed, then splice with a dirt seed -> sand seed ---
+  a.send('buy', { itemId: 'grass_seed', qty: 1 });
   await a.wait('inventory');
   a.clear();
-  a.send('splice', { a: 'dirt_seed', b: 'rock_seed' });
+  a.send('splice', { a: 'dirt_seed', b: 'grass_seed' });
   const invSplice = await a.wait('inventory');
-  ok(invSplice.inventory.brick_seed === 1, 'splice dirt+rock = brick seed');
+  ok(invSplice.inventory.sand_seed === 1, 'splice dirt+grass = sand seed');
 
   // --- plant a seed -> tree ---
   a.clear();

@@ -35,6 +35,9 @@ const ACCOUNTS_FILE = path.join(DATA, 'accounts.json');
 const DEVELOPERS_FILE = path.join(DATA, 'developers.json');
 const GAMEBANS_FILE = path.join(DATA, 'gamebans.json');
 const WORLD_BAN_MS = 30 * 60 * 1000;   // world-owner ban duration (30 minutes)
+const SUPER_COST = 500;                // SuperBroadcast gem cost
+const SUPER_COOLDOWN = 10 * 60 * 1000; // SuperBroadcast cooldown
+const BROADCAST_REACH = 50;            // a Broadcast reaches this many random players
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const DEV_ACCOUNT_NAME = '@XtremeFire';
@@ -195,6 +198,8 @@ function handle(p, msg) {
     case 'addAdmin':    return onAddAdmin(p, msg);
     case 'respawn':     return onRespawn(p);
     case 'chat':        return onChat(p, msg);
+    case 'broadcast':   return onBroadcast(p, msg);
+    case 'superBroadcast': return onSuperBroadcast(p, msg);
     case 'command':     return onCommand(p, msg);
     case 'deleteWorld': return onDeleteWorld(p, msg);
     case 'tradeRequest': return onTradeRequest(p, msg);
@@ -553,8 +558,21 @@ function onPlace(p, msg) {
     return toPlayer(p, 'notify', { text: `Area locked by ${info ? info.owner : 'someone'}.` });
   }
 
-  // seeds -> plant a tree
+  // seeds -> plant a tree, OR splice when planted over a still-growing tree
   if (def.type === 'seed') {
+    if (w.fg[i] === '__tree__' && w.data[i] && w.data[i].tree && !w.treeReady(i)) {
+      const existing = w.data[i].tree.seed;
+      const result = spliceResult(existing, itemId);
+      if (!result) return toPlayer(p, 'notify', { text: 'Those seeds don\'t splice into anything.' });
+      take(p, itemId, 1);
+      w.data[i] = { tree: { seed: result, plantedAt: Date.now(), growTime: ITEMS[result].growTime } };
+      broadcast(p.world, 'tileUpdate', { x, y, fg: '__tree__', data: w.data[i] });
+      sendInventory(p);
+      award(p, 'splicer');
+      toPlayer(p, 'notify', { text: `Spliced into ${ITEMS[result].name}!` });
+      scheduleSave(p.world);
+      return;
+    }
     if (!w.plant(x, y, itemId)) return;
     take(p, itemId, 1);
     broadcast(p.world, 'tileUpdate', { x, y, fg: '__tree__', data: w.data[i] });
@@ -728,6 +746,15 @@ function onRespawn(p) {
 }
 
 // ---------- chat ----------
+// ---------- notifications (the top notification bar) ----------
+function sendNotif(target, payload) { toPlayer(target, 'notif', payload); }
+function worldNotif(worldName, payload) {
+  for (const p of players.values()) if (p.world === worldName && p.name) sendNotif(p, payload);
+}
+function globalNotif(payload) {
+  for (const p of players.values()) if (p.name) sendNotif(p, payload);
+}
+
 function onChat(p, msg) {
   if (!p.world) return;
   const text = String(msg.text || '').slice(0, 120);
@@ -736,7 +763,36 @@ function onChat(p, msg) {
     const parts = text.slice(1).split(/\s+/);
     return runCommand(p, (parts.shift() || '').toLowerCase(), parts.join(' ').trim());
   }
-  broadcast(p.world, 'chat', { name: p.name, dev: isDeveloper(p), text });
+  // world speech -> "(Name): text"
+  worldNotif(p.world, { kind: 'world', name: p.name, dev: isDeveloper(p), text });
+}
+
+function onBroadcast(p, msg) {
+  const text = String(msg.text || '').slice(0, 120).trim();
+  if (!text || !p.name) return;
+  const online = [...players.values()].filter((pl) => pl.name && pl !== p);
+  // shuffle and take up to (REACH-1) others, always include the sender
+  for (let i = online.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [online[i], online[j]] = [online[j], online[i]]; }
+  const recipients = [p, ...online.slice(0, BROADCAST_REACH - 1)];
+  const payload = { kind: 'broadcast', name: p.name, dev: isDeveloper(p), text };
+  for (const pl of recipients) sendNotif(pl, payload);
+}
+
+function onSuperBroadcast(p, msg) {
+  const text = String(msg.text || '').slice(0, 120).trim();
+  if (!text || !p.name) return;
+  const now = Date.now();
+  if (!isDeveloper(p)) {
+    if (p.superAt && now - p.superAt < SUPER_COOLDOWN) {
+      const mins = Math.ceil((SUPER_COOLDOWN - (now - p.superAt)) / 60000);
+      return toPlayer(p, 'notify', { text: `SuperBroadcast is on cooldown (${mins} min left).` });
+    }
+    if (!canAffordGems(p, SUPER_COST)) return toPlayer(p, 'notify', { text: `SuperBroadcast costs ${SUPER_COST} gems.` });
+    spendGems(p, SUPER_COST);
+    sendInventory(p);
+  }
+  p.superAt = now;
+  globalNotif({ kind: 'super', name: p.name, dev: isDeveloper(p), text, beep: true });
 }
 
 // Wrench actions send the same commands the chat slash-commands run.
@@ -811,6 +867,7 @@ function cmdWorldBan(p, name, durationMs) {
   w.bans = w.bans || {};
   w.bans[normalizeAccountName(targetName)] = durationMs === Infinity ? true : Date.now() + durationMs;
   scheduleSave(p.world);
+  worldNotif(w.name, { kind: 'event', text: `${targetName} has been banned from ${w.name}` });
   if (target && target.world === p.world) forceLeaveWorld(target, `You were banned from ${w.name}.`);
   toPlayer(p, 'notify', { text: durationMs === Infinity ? `${targetName} is permanently banned from ${w.name}.` : `${targetName} is banned from ${w.name} for 30 min.` });
 }
@@ -832,6 +889,7 @@ function cmdKick(p, name) {
   toPlayer(target, 'respawnAt', { x: sp.x, y: sp.y });
   toPlayer(target, 'notify', { text: 'You were sent back to spawn.' });
   broadcast(p.world, 'playerMove', publicPlayer(target), target.id);
+  worldNotif(p.world, { kind: 'event', text: `${target.name} has been kicked` });
   toPlayer(p, 'notify', { text: `Kicked ${target.name} to spawn.` });
 }
 function cmdPull(p, name) {
@@ -842,6 +900,7 @@ function cmdPull(p, name) {
   toPlayer(target, 'respawnAt', { x: p.x, y: p.y });
   toPlayer(target, 'notify', { text: `${p.name} pulled you.` });
   broadcast(p.world, 'playerMove', publicPlayer(target), target.id);
+  worldNotif(p.world, { kind: 'event', text: `${p.name} pulled ${target.name}` });
   toPlayer(p, 'notify', { text: `Pulled ${target.name} to you.` });
 }
 function cmdGameBan(p, name) {
@@ -851,6 +910,7 @@ function cmdGameBan(p, name) {
   if (isDeveloperName(targetName)) return toPlayer(p, 'notify', { text: 'You cannot ban a developer.' });
   gameBans.add(normalizeAccountName(targetName));
   saveGameBans();
+  globalNotif({ kind: 'event', text: `${targetName} has been nuked by the Ancient Gods` });
   if (target) {
     if (target.world) forceLeaveWorld(target, 'You were banned from TreeTopia.');
     toPlayer(target, 'gameBanned', { reason: 'You have been banned from TreeTopia.' });

@@ -14,8 +14,10 @@ export class UI {
     this.myTradeItems = {};
     this._tagEls = {};
     this._profileTargetId = null;
+    this._notifs = [];
     this.wireStaticButtons();
     this.wireDrawer();
+    this.wireNotifBar();
   }
   setGame(g) { this.game = g; }
 
@@ -29,7 +31,7 @@ export class UI {
 
   // ---------- helpers ----------
   modalOpen() {
-    return !$('modalBackdrop').classList.contains('hidden') || document.activeElement === $('chatInput');
+    return !$('modalBackdrop').classList.contains('hidden');
   }
   openModal(id) {
     $('modalBackdrop').classList.remove('hidden');
@@ -294,20 +296,71 @@ export class UI {
   }
   onTradeDone() { this.trade = null; this.myTradeItems = {}; this.closeModals(); }
 
-  // ---------- chat ----------
-  addChat(name, text, sys = false, dev = false) {
-    const log = $('chatLog');
-    const d = document.createElement('div');
-    if (sys) d.innerHTML = `<span class="sys">${text}</span>`;
-    else {
-      const label = dev && !String(name).startsWith('@') ? '@' + name : name;
-      const nameClass = dev ? 'cname dev-name' : 'cname';
-      d.innerHTML = `<span class="${nameClass}">${escapeHtml(label)}:</span> ${escapeHtml(text)}`;
-    }
-    log.appendChild(d); log.scrollTop = log.scrollHeight;
-    while (log.children.length > 40) log.removeChild(log.firstChild);
+  // ---------- notifications (the top bar) ----------
+  // Persist across worlds; cleared only on a fresh login (see clearNotifs()).
+  clearNotifs() { this._notifs = []; this.renderNotifs(); }
+  addNotif(m) {
+    if (!this._notifs) this._notifs = [];
+    const label = (n) => (m.dev && !String(n).startsWith('@') ? '@' + n : n);
+    let cls = 'notif ' + (m.kind || 'event');
+    let html;
+    if (m.kind === 'world') html = `<span class="who ${m.dev ? 'dev-name' : ''}">(${escapeHtml(label(m.name))})</span>: ${escapeHtml(m.text)}`;
+    else if (m.kind === 'broadcast') html = `<span class="tag">Broadcast</span> <span class="who ${m.dev ? 'dev-name' : ''}">(${escapeHtml(label(m.name))})</span>: ${escapeHtml(m.text)}`;
+    else if (m.kind === 'super') html = `<span class="tag">SuperBroadcast</span> <span class="who ${m.dev ? 'dev-name' : ''}">(${escapeHtml(label(m.name))})</span>: ${escapeHtml(m.text)}`;
+    else html = escapeHtml(m.text);
+    this._notifs.unshift({ cls, html });        // newest first
+    if (this._notifs.length > 80) this._notifs.length = 80;
+    this.renderNotifs();
+    if (m.beep) this.playBeep();
   }
-  focusChat() { setTyping(true); $('chatInput').focus(); }
+  renderNotifs() {
+    const box = $('notifScroll'); if (!box) return;
+    box.innerHTML = '';
+    if (!this._notifs || !this._notifs.length) { box.innerHTML = '<div class="notif-empty">No messages yet.</div>'; return; }
+    for (const n of this._notifs) {
+      const d = document.createElement('div'); d.className = n.cls; d.innerHTML = n.html;
+      box.appendChild(d);
+    }
+  }
+  playBeep() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!this._audio) this._audio = new AC();
+      const ac = this._audio; if (ac.state === 'suspended') ac.resume();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square'; o.frequency.value = 880;
+      g.gain.value = 0.05; o.connect(g); g.connect(ac.destination);
+      o.start(); o.frequency.setValueAtTime(660, ac.currentTime + 0.1);
+      o.stop(ac.currentTime + 0.2);
+    } catch { /* audio not available */ }
+  }
+  // notification bar: drag the bottom handle DOWN to expand, up to collapse
+  wireNotifBar() {
+    const bar = $('notifBar'), handle = $('notifHandle');
+    if (!bar || !handle) return;
+    const MIN = 28, maxH = () => Math.round(window.innerHeight * 0.7);
+    let startY = null, startH = 0;
+    handle.addEventListener('pointerdown', (e) => {
+      startY = e.clientY; startH = bar.getBoundingClientRect().height;
+      try { handle.setPointerCapture(e.pointerId); } catch {}
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => { if (startY != null) bar.style.height = Math.max(MIN, Math.min(maxH(), startH + (e.clientY - startY))) + 'px'; });
+    const end = () => { startY = null; };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  }
+  // ---------- compose / send messages ----------
+  openCompose() { this.openModal('composeModal'); setTimeout(() => $('composeInput').focus(), 50); }
+  sendCompose(mode) {
+    const ci = $('composeInput'); const text = ci.value.trim();
+    if (!text) return;
+    if (mode === 'world') this.net.send('chat', { text });        // slash-commands handled server-side
+    else if (mode === 'broadcast') this.net.send('broadcast', { text });
+    else if (mode === 'super') this.net.send('superBroadcast', { text });
+    ci.value = ''; this.closeModals();
+  }
+  focusChat() { this.openCompose(); }   // Enter on desktop opens the composer
 
   // ---------- drawer drag (continuous height — drag the notch up/down) ----------
   wireDrawer() {
@@ -427,22 +480,19 @@ export class UI {
     $('acceptTradeBtn').onclick = () => { this.net.send('tradeAccept', { fromId: this._pendingFrom }); this.closeModals(); };
     $('declineTradeBtn').onclick = () => this.closeModals();
 
-    const ci = $('chatInput');
-    const sendChat = (keepFocus) => {
-      const t = ci.value.trim();
-      if (t) this.net.send('chat', { text: t });
-      ci.value = '';
-      if (!keepFocus) { ci.blur(); setTyping(false); }
-    };
+    // compose / send messages
+    $('sayBtn').onclick = () => this.openCompose();
+    $('sayWorldBtn').onclick = () => this.sendCompose('world');
+    $('broadcastBtn').onclick = () => this.sendCompose('broadcast');
+    $('superBtn').onclick = () => this.sendCompose('super');
+    const ci = $('composeInput');
+    ci.addEventListener('focus', () => setTyping(true));
+    ci.addEventListener('blur', () => setTyping(false));
     ci.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') sendChat(false);
-      else if (e.key === 'Escape') { ci.value = ''; ci.blur(); setTyping(false); }
+      if (e.key === 'Enter') this.sendCompose('world');     // Enter = say in world
+      else if (e.key === 'Escape') this.closeModals();
     });
-    ci.addEventListener('focus', () => setTyping(true));   // mobile: tapping the box = chatting
-    ci.addEventListener('blur', () => setTyping(false));
-    // explicit Send button — the reliable way to send on mobile (no Enter key)
-    $('chatSend').addEventListener('click', () => sendChat(true));
   }
 }
 

@@ -37,6 +37,7 @@ net.on('welcome', (m) => {
     saveCreds(pendingCreds);   // remember a real login/register so it auto-fills next time
   }
   pendingCreds = null;
+  ui.clearNotifs();          // notifications persist across worlds, clear on (re)login
   ui.onInventory();
   ui.onDevStatus();
   showScreen('worldSelect');
@@ -45,7 +46,7 @@ net.on('welcome', (m) => {
 net.on('authError', (m) => { pendingCreds = null; ui.showAuthError(m.text); });
 net.on('worldList', (m) => renderWorldList(m.worlds));
 net.on('notify', (m) => ui.toast(m.text));
-net.on('chat', (m) => ui.addChat(m.name, m.text, false, m.dev));
+net.on('notif', (m) => ui.addNotif(m));
 net.on('profile', (m) => ui.onProfile(m));
 net.on('devList', (m) => ui.onDevList(m.developers || []));
 net.on('kickedFromWorld', (m) => {

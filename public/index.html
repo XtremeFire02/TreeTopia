@@ -59,6 +59,7 @@
       </div>
       <div class="hud-right">
         <span class="chip gems"><span id="gemCount">0</span> 💎</span>
+        <button id="sayBtn" class="hud-btn">💬 Say</button>
         <button id="shopBtn" class="hud-btn">🛒 Shop</button>
         <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
         <button id="devBtn" class="hud-btn hidden">⚙️ Dev</button>
@@ -69,13 +70,10 @@
     <!-- DOM overlay layer for player name tags + wrench buttons -->
     <div id="playerTags"></div>
 
-    <!-- chat -->
-    <div id="chatBox">
-      <div id="chatLog"></div>
-      <div class="chat-row">
-        <input id="chatInput" maxlength="120" placeholder="Tap to chat…" />
-        <button id="chatSend" aria-label="Send message">➤</button>
-      </div>
+    <!-- global notification bar (drag the handle down for history) -->
+    <div id="notifBar">
+      <div id="notifScroll"></div>
+      <div id="notifHandle" title="Drag down for older notifications"><span class="notch-bar"></span></div>
     </div>
 
     <!-- toast notifications -->
@@ -206,6 +204,18 @@
       <div class="splice-row"><input id="devNameInput" maxlength="16" placeholder="Player name: letters/numbers only" /><button id="grantDevBtn" class="big-btn small">Grant Dev</button></div>
       <div id="devList" class="dev-list"></div>
       <div class="row-right"><button id="delWorldBtn" class="ghost-btn danger">🗑️ Delete this world</button></div>
+    </div>
+
+    <!-- Compose / chat -->
+    <div id="composeModal" class="modal small hidden">
+      <div class="modal-head"><h3>💬 Send a message</h3><button class="close-x" data-close>✕</button></div>
+      <input id="composeInput" maxlength="120" placeholder="Type a message…" autocomplete="off" />
+      <div class="compose-btns">
+        <button id="sayWorldBtn" class="big-btn small">💬 World</button>
+        <button id="broadcastBtn" class="big-btn small alt">📢 Broadcast</button>
+        <button id="superBtn" class="big-btn small super">📣 Super 500💎</button>
+      </div>
+      <p class="hint">World: everyone in this world · Broadcast: 50 random players · SuperBroadcast: everyone (500 gems, 10 min cooldown). Start with <b>/</b> for commands.</p>
     </div>
 
     <!-- Trade request prompt -->
