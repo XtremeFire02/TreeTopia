@@ -107,9 +107,10 @@
       <div class="swatches" id="swatches"></div>
 
       <h3>Game library <small class="dot off" id="libStatus" title="Click to enter the studio key">○ offline</small></h3>
+      <input type="text" id="serverUrl" placeholder="Server URL — e.g. http://13.237.239.15" />
       <input type="text" id="libSearch" placeholder="Search game items…" />
       <div id="library" class="library"></div>
-      <div class="hint" id="libHint">Open this editor at <b>/studio</b> on the game server, then click the status above and enter the <b>studio key</b> (a developer gets it in-game with <b>/studiokey</b>) to load, edit, price and delete real game items.</div>
+      <div class="hint" id="libHint">To save into the game: set the <b>Server URL</b> above (e.g. <b>http://13.237.239.15</b>) — or open this editor at <b>/studio</b> on the server and leave it blank — then enter the <b>studio key</b> (a developer gets it in-game with <b>/studiokey</b>). The status dot turns green when connected.</div>
     </div>
 
     <!-- CENTER: canvas + frames -->
@@ -176,7 +177,7 @@
           <option>wings</option><option>shirt</option><option>pants</option><option>scarf</option><option>shoes</option><option>pet</option>
         </select>
       </div>
-      <button class="btn go" id="saveGameBtn" disabled>💾 Save to game</button>
+      <button class="btn go" id="saveGameBtn">💾 Save to game</button>
       <div class="hint" id="saveStatus"></div>
 
       <h3>Export files</h3>
@@ -488,12 +489,18 @@
   // ---------- game integration (open this editor at /studio on the game server) ----------
   let connected=false, allItems=[];
   let studioKey = ''; try{ studioKey = localStorage.getItem('tt_studio_key')||''; }catch(_){}
+  let serverUrl = ''; try{ serverUrl = localStorage.getItem('tt_studio_server')||''; }catch(_){}
+  // When opened at /studio on the game server this stays '' (same origin). When
+  // opened as a local file, set it to your server, e.g. http://13.237.239.15
+  function apiBase(){ return (serverUrl||'').replace(/\/$/, ''); }
+  function setServer(u){ serverUrl=(u||'').trim(); try{ localStorage.setItem('tt_studio_server', serverUrl); }catch(_){} const f=$('serverUrl'); if(f) f.value=serverUrl; }
+  function abs(u){ return u && !/^https?:/i.test(u) ? apiBase()+(u[0]==='/'?'':'/')+u : u; }
   function setKey(k){ studioKey=(k||'').trim(); try{ localStorage.setItem('tt_studio_key', studioKey); }catch(_){} }
   function promptKey(){ const k=prompt('Enter the Sprite Studio key (a developer can get it in-game with /studiokey):', studioKey||''); if(k!=null){ setKey(k); return true; } return false; }
-  // fetch helper that attaches the key and re-prompts once on an auth failure
+  // fetch helper that attaches the key + server base, and re-prompts once on auth failure
   async function sfetch(url, opts={}, retried){
     opts.headers = Object.assign({}, opts.headers, { 'x-studio-key': studioKey });
-    const r = await fetch(url, opts);
+    const r = await fetch(apiBase()+'/'+url.replace(/^\//,''), opts);
     if(r.status===403 && !retried){ if(promptKey()) return sfetch(url, opts, true); }
     return r;
   }
@@ -503,7 +510,6 @@
   function setConn(on){
     connected=on;
     const s=$('libStatus'); s.textContent = on?'● connected':'○ offline'; s.className='dot '+(on?'on':'off');
-    $('saveGameBtn').disabled = !on;
     $('libHint').style.display = on?'none':'block';
   }
   async function refreshLibrary(){
@@ -517,7 +523,7 @@
     const box=$('library'); box.innerHTML='';
     allItems.filter(it=> !q || it.id.includes(q) || (it.name||'').toLowerCase().includes(q)).slice(0,300).forEach(it=>{
       const row=document.createElement('div'); row.className='lib-row';
-      const img=document.createElement('img'); if(it.sprite) img.src=it.sprite; else { img.style.visibility='hidden'; }
+      const img=document.createElement('img'); if(it.sprite) img.src=abs(it.sprite); else { img.style.visibility='hidden'; }
       const nm=document.createElement('div'); nm.className='ln'; nm.innerHTML=(it.name||it.id)+'<div class="lt">'+it.id+' · '+it.type+(it.frames>1?(' · '+it.frames+'f'):'')+'</div>';
       row.appendChild(img); row.appendChild(nm);
       if(it.custom){ const b=document.createElement('span'); b.className='badge'; b.textContent='custom'; row.appendChild(b);
@@ -534,7 +540,7 @@
       try{ const r=await sfetch('api/studio/source?id='+encodeURIComponent(it.id)); if(r.ok){ const j=await r.json(); if(j.text){ loadText(j.text); } } }catch(_){ }
     } else {
       const url = (it.sheet && it.frames>1) ? it.sheet : it.sprite;
-      if(url) await sampleImageToFrames(url, it.frames>1?it.frames:1);
+      if(url) await sampleImageToFrames(abs(url), it.frames>1?it.frames:1);
     }
     // fill the game-item fields from the registry entry
     $('gid').value=it.id; $('name').value=it.name||it.id;
@@ -579,7 +585,14 @@
   function setSaveStatus(t,bad){ const e=$('saveStatus'); e.textContent=t; e.style.color=bad?'#ff9b9b':'var(--muted)'; }
 
   async function saveToGame(){
-    if(!connected) return;
+    if(!connected){
+      await refreshLibrary();                  // try to (re)connect with the current URL + key
+      if(!connected){
+        setSaveStatus('Not connected to the game server. Set the Server URL above (e.g. http://13.237.239.15) and the studio key, then try again.',true);
+        if(!serverUrl){ const u=prompt('Game server URL (e.g. http://13.237.239.15):', 'http://13.237.239.15'); if(u){ setServer(u); promptKey(); await refreshLibrary(); } }
+        if(!connected) return;
+      }
+    }
     const id=( $('gid').value || $('name').value ).toLowerCase().replace(/[^a-z0-9_]/g,'');
     if(!id){ setSaveStatus('Enter an item id first.',true); return; }
     const type=$('gtype').value;
@@ -607,6 +620,9 @@
       setSaveStatus('Deleted "'+id+'".'); await refreshLibrary();
     }catch(e){ setSaveStatus('Delete failed: '+e,true); }
   }
+
+  $('serverUrl').value=serverUrl;
+  $('serverUrl').onchange=()=>{ setServer($('serverUrl').value); refreshLibrary(); };
 
   // ---------- boot ----------
   buildSwatches(); selectSwatch();

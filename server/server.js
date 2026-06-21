@@ -81,6 +81,11 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
+  // allow the studio (even opened as a local file) to call the API cross-origin
+  if (req.method === 'OPTIONS' && (url.startsWith('/api/') || url.startsWith('/custom-assets/'))) {
+    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'x-studio-key, content-type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' });
+    return res.end();
+  }
   if (url === '/studio' || url.startsWith('/api/studio/')) return handleStudio(req, res, url);
   if (url === '/api/custom-items') return sendJson(res, 200, customStore);     // public: clients merge these
   if (url.startsWith('/custom-assets/')) return serveCustomAsset(res, url);
@@ -99,7 +104,7 @@ const server = http.createServer((req, res) => {
 // Custom items + assets live in the persistent data dir so they survive deploys.
 // Reads are public; writes require the secret studio key (see /studiokey in-game).
 function sendJson(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json' });
+  res.writeHead(code, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify(obj));
 }
 function readBody(req) {
@@ -120,7 +125,7 @@ function serveCustomAsset(res, url) {
   if (!f.startsWith(CUSTOM_ASSETS)) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(f, (err, buf) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Access-Control-Allow-Origin': '*' });
     res.end(buf);
   });
 }
