@@ -4,6 +4,15 @@
 import { WORLD_W, WORLD_H, SKY_ROWS, TILE } from '../public/js/shared/constants.js';
 import { ITEMS } from '../public/js/shared/items.js';
 
+function sameName(a, b) {
+  return String(a || '').toLowerCase() === String(b || '').toLowerCase();
+}
+
+function nameIn(list, name) {
+  const lower = String(name || '').toLowerCase();
+  return (list || []).some((n) => String(n || '').toLowerCase() === lower);
+}
+
 export class World {
   constructor(name) {
     this.name = name.toUpperCase();
@@ -84,11 +93,11 @@ export class World {
   canModify(playerName, x, y) {
     const areaLock = this.lockAt(x, y);
     if (areaLock) {
-      return areaLock.lock.owner === playerName ||
-             areaLock.lock.admins.includes(playerName);
+      return sameName(areaLock.lock.owner, playerName) ||
+             nameIn(areaLock.lock.admins, playerName);
     }
     if (this.owner) {
-      return this.owner === playerName || this.admins.includes(playerName);
+      return sameName(this.owner, playerName) || nameIn(this.admins, playerName);
     }
     return true; // public world, no area lock
   }

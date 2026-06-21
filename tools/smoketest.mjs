@@ -1,7 +1,7 @@
 // End-to-end protocol smoke test against a running server.
 import WebSocket from 'ws';
 
-const URL = 'ws://localhost:3000';
+const URL = process.env.TEST_WS_URL || 'ws://localhost:3000';
 let pass = 0, fail = 0;
 const ok = (c, m) => { (c ? pass++ : fail++); console.log((c ? '  PASS ' : '  FAIL ') + m); };
 
@@ -107,16 +107,33 @@ const RID = Math.random().toString(36).slice(2, 7);
   const b = mkClient();
   await b.open();
   b.send('register', { name: 'Intruder' + RID, password: 'testpass' });
-  await b.wait('welcome');
+  const bWelcome = await b.wait('welcome');
   await b.wait('worldList');
   b.send('enterWorld', { name: 'SMOKE' + RID });
-  const wd2 = await b.wait('worldData');
+  await b.wait('worldData');
   b.send('move', { x: (sx - 2) * 32 + 16, y: sy * 32 + 32, vx: 0, vy: 0, dir: 1, anim: 'idle', name: 'Intruder' });
   await sleep(50);
   b.clear();
   b.send('place', { x: sx - 2, y: sy - 2, itemId: 'dirt', layer: 0 });
   const notify = await b.wait('notify').catch(() => null);
   ok(notify && /lock/i.test(notify.text), 'intruder is blocked by the lock');
+
+  // --- trading: normal item stacks can be offered (regression for offer clamp) ---
+  a.clear(); b.clear();
+  a.send('tradeRequest', { targetId: bWelcome.id });
+  const req = await b.wait('tradeRequest').catch(() => null);
+  ok(req && req.fromId === welcome.id, 'trade request reaches the target player');
+  b.send('tradeAccept', { fromId: welcome.id });
+  await a.wait('tradeWindow');
+  await b.wait('tradeWindow');
+  a.clear(); b.clear();
+  a.send('tradeOffer', { items: { dirt: 1 }, gems: 0 });
+  const tradeA = await a.wait('tradeWindow').catch(() => null);
+  const tradeB = await b.wait('tradeWindow').catch(() => null);
+  ok(tradeA && tradeA.yourItems.dirt === 1 && tradeB && tradeB.theirItems.dirt === 1, 'trade offer accepts a normal dirt stack');
+  a.send('tradeCancel');
+  await a.wait('tradeDone').catch(() => null);
+  await b.wait('tradeDone').catch(() => null);
 
   // --- main door cannot be broken (when standing beside it, not on it) ---
   a.clear();
@@ -150,6 +167,24 @@ const RID = Math.random().toString(36).slice(2, 7);
   const accW2 = await acc2.wait('welcome').catch(() => null);
   ok(accW2 && accW2.name === uname, 'login accepts the correct password');
   acc2.ws.close();
+
+  // --- account names are unique case-insensitively, but preserve display casing ---
+  const caseName = 'Case' + RID;
+  const case1 = mkClient(); await case1.open();
+  case1.send('register', { name: caseName, password: 'casepass' });
+  const caseW = await case1.wait('welcome').catch(() => null);
+  ok(caseW && caseW.name === caseName, 'register preserves account name casing');
+  const case2 = mkClient(); await case2.open();
+  case2.send('register', { name: caseName.toLowerCase(), password: 'casepass' });
+  const caseTaken = await case2.wait('authError').catch(() => null);
+  ok(caseTaken && /taken/i.test(caseTaken.text), 'duplicate account casing is rejected');
+  case1.ws.close(); case2.ws.close();
+  await sleep(100);
+  const case3 = mkClient(); await case3.open();
+  case3.send('login', { name: caseName.toLowerCase(), password: 'casepass' });
+  const caseLogin = await case3.wait('welcome').catch(() => null);
+  ok(caseLogin && caseLogin.name === caseName, 'login resolves account casing case-insensitively');
+  case3.ws.close();
 
   // --- profile / achievements (Tester broke a block and spliced) ---
   a.clear();
