@@ -59,7 +59,8 @@
       </div>
       <div class="hud-right">
         <span class="chip gems"><span id="gemCount">0</span> 💎</span>
-        <button id="sayBtn" class="hud-btn">💬 Say</button>
+        <button id="chatBtn" class="hud-btn">💬 Chat</button>
+        <button id="sayBtn" class="hud-btn">📢 Cast</button>
         <button id="shopBtn" class="hud-btn">🛒 Shop</button>
         <button id="adminBtn" class="hud-btn hidden">👑 Manage</button>
         <button id="devBtn" class="hud-btn hidden">⚙️ Dev</button>
@@ -75,6 +76,8 @@
       <div id="notifScroll"></div>
       <div id="notifHandle" title="Drag down for older notifications"><span class="notch-bar"></span></div>
     </div>
+    <!-- live chat draft notch (shown while composing world speech) -->
+    <input id="chatDraft" class="hidden" maxlength="120" autocomplete="off" placeholder="Type, then Enter to speak…" />
 
     <!-- toast notifications -->
     <div id="toasts"></div>
@@ -211,11 +214,10 @@
       <div class="modal-head"><h3>💬 Send a message</h3><button class="close-x" data-close>✕</button></div>
       <input id="composeInput" maxlength="120" placeholder="Type a message…" autocomplete="off" />
       <div class="compose-btns">
-        <button id="sayWorldBtn" class="big-btn small">💬 World</button>
         <button id="broadcastBtn" class="big-btn small alt">📢 Broadcast</button>
         <button id="superBtn" class="big-btn small super">📣 Super 500💎</button>
       </div>
-      <p class="hint">World: everyone in this world · Broadcast: 50 random players · SuperBroadcast: everyone (500 gems, 10 min cooldown). Start with <b>/</b> for commands.</p>
+      <p class="hint">Broadcast: 50 random players · SuperBroadcast: everyone (500 gems, 10 min cooldown). For local chat use the 💬 Chat button. Start with <b>/</b> for commands.</p>
     </div>
 
     <!-- Trade request prompt -->

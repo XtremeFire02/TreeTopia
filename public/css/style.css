@@ -135,6 +135,15 @@ input:focus, select:focus { border-color: var(--accent2); }
   border-radius: 0 0 14px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
 }
 #notifScroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 10px; display: flex; flex-direction: column; gap: 4px; }
+/* live chat draft, a notch hanging under the notification bar */
+#chatDraft {
+  position: absolute; top: 44px; left: 50%; transform: translateX(-50%);
+  width: min(480px, 58vw); z-index: 20; margin: 0; outline: none;
+  background: rgba(36,48,68,.97); border: 1px solid rgba(255,255,255,.22); border-top: none;
+  border-radius: 0 0 12px 12px; color: var(--text); padding: 7px 14px; font-size: 14px; text-align: center;
+}
+#chatDraft:focus { border-color: var(--accent); }
+
 #notifHandle { flex: 0 0 auto; display: flex; justify-content: center; padding: 3px 0 5px; cursor: grab; touch-action: none; }
 #notifHandle:active { cursor: grabbing; }
 .notif { font-size: 13px; line-height: 1.3; padding: 4px 8px; border-radius: 7px; background: rgba(255,255,255,.04); word-break: break-word; }

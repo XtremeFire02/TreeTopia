@@ -20,6 +20,7 @@ export class Game {
     this.drops = new Map();
     this.others = new Map();
     this.breakFx = new Map();      // "x,y" -> {hits,hardness,t}
+    this.speeches = new Map();     // playerId -> { text, until } speech bubbles
     this.particles = [];
 
     this.local = { x: 0, y: 0, vx: 0, vy: 0, dir: 1, onGround: false, anim: 'idle', walkT: 0, dead: false, deadAt: 0, jumpsUsed: 0, punchAt: 0, punchDir: 1, punchAngle: 0, punchDist: 0, punchSeq: 0 };
@@ -78,6 +79,7 @@ export class Game {
       this.ui.onInventory();
     });
     n.on('devStatus', (m) => { this.me.dev = !!m.dev; this.ui.onDevStatus(); });
+    n.on('speech', (m) => this.speeches.set(m.id, { text: String(m.text).slice(0, 80), until: performance.now() + 5000 }));
   }
 
   onWorldData(m) {
@@ -467,6 +469,15 @@ export class Game {
         const time = secs < 60 ? `${secs}s left` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} left`;
         this.drawBubble(ctx, this.local.x - camX, this.local.y - camY - 70, [`🌱 ${typeName}`, time]);
       }
+    }
+
+    // speech bubbles over players who recently spoke
+    for (const [id, sp] of this.speeches) {
+      if (now > sp.until) { this.speeches.delete(id); continue; }
+      let px, py;
+      if (id === this.me.id) { px = this.local.x; py = this.local.y; }
+      else { const o = this.others.get(id); if (!o) continue; px = o.x; py = o.y; }
+      this.drawBubble(ctx, px - camX, py - camY - TILE - 16, sp.text);
     }
 
     ctx.restore();   // end scaled world space

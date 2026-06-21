@@ -350,17 +350,36 @@ export class UI {
     handle.addEventListener('pointerup', end);
     handle.addEventListener('pointercancel', end);
   }
-  // ---------- compose / send messages ----------
+  // ---------- broadcasts (📢 Cast modal) ----------
   openCompose() { this.openModal('composeModal'); setTimeout(() => $('composeInput').focus(), 50); }
   sendCompose(mode) {
     const ci = $('composeInput'); const text = ci.value.trim();
     if (!text) return;
-    if (mode === 'world') this.net.send('chat', { text });        // slash-commands handled server-side
-    else if (mode === 'broadcast') this.net.send('broadcast', { text });
+    if (mode === 'broadcast') this.net.send('broadcast', { text });
     else if (mode === 'super') this.net.send('superBroadcast', { text });
     ci.value = ''; this.closeModals();
   }
-  focusChat() { this.openCompose(); }   // Enter on desktop opens the composer
+  // ---------- local chat (💬) — live draft notch under the notification bar ----------
+  startChat() {
+    const cd = $('chatDraft');
+    cd.classList.remove('hidden');
+    cd.value = '';
+    setTimeout(() => cd.focus(), 30);
+  }
+  sendChat() {
+    const cd = $('chatDraft');
+    const text = cd.value.trim();
+    if (text) this.net.send('chat', { text });   // server posts the notif + a speech bubble
+    this.hideChat();
+  }
+  hideChat() {
+    const cd = $('chatDraft');
+    if (cd.classList.contains('hidden')) return;
+    cd.value = '';
+    cd.classList.add('hidden');
+    setTyping(false);
+  }
+  focusChat() { this.startChat(); }   // Enter on desktop opens the chat draft
 
   // ---------- drawer drag (continuous height — drag the notch up/down) ----------
   wireDrawer() {
@@ -480,18 +499,23 @@ export class UI {
     $('acceptTradeBtn').onclick = () => { this.net.send('tradeAccept', { fromId: this._pendingFrom }); this.closeModals(); };
     $('declineTradeBtn').onclick = () => this.closeModals();
 
-    // compose / send messages
+    // local chat (💬) + broadcasts (📢 Cast)
+    $('chatBtn').onclick = () => this.startChat();
     $('sayBtn').onclick = () => this.openCompose();
-    $('sayWorldBtn').onclick = () => this.sendCompose('world');
     $('broadcastBtn').onclick = () => this.sendCompose('broadcast');
     $('superBtn').onclick = () => this.sendCompose('super');
     const ci = $('composeInput');
     ci.addEventListener('focus', () => setTyping(true));
     ci.addEventListener('blur', () => setTyping(false));
-    ci.addEventListener('keydown', (e) => {
+    ci.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') this.closeModals(); });
+    // live chat-draft notch
+    const cd = $('chatDraft');
+    cd.addEventListener('focus', () => setTyping(true));
+    cd.addEventListener('blur', () => setTyping(false));
+    cd.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') this.sendCompose('world');     // Enter = say in world
-      else if (e.key === 'Escape') this.closeModals();
+      if (e.key === 'Enter') this.sendChat();
+      else if (e.key === 'Escape') this.hideChat();
     });
   }
 }

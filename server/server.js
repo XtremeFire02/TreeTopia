@@ -763,8 +763,9 @@ function onChat(p, msg) {
     const parts = text.slice(1).split(/\s+/);
     return runCommand(p, (parts.shift() || '').toLowerCase(), parts.join(' ').trim());
   }
-  // world speech -> "(Name): text"
+  // world speech -> notification bar + a speech bubble over the speaker's head
   worldNotif(p.world, { kind: 'world', name: p.name, dev: isDeveloper(p), text });
+  broadcast(p.world, 'speech', { id: p.id, text });   // includes the sender
 }
 
 function onBroadcast(p, msg) {
