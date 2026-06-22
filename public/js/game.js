@@ -6,7 +6,7 @@ import {
 import { ITEMS, isSolid, hasEffect, hasEquippedEffect, isPlaceable } from './shared/items.js';
 import { DEVELOPER_NAME_COLOR, DEVELOPER_NAME_STROKE } from './shared/names.js';
 import { keys, mouse } from './input.js';
-import { tileSprite, dropSprite, sheetSprite } from './assets.js';
+import { tileSprite, dropSprite, sheetSprite, playerPartSprite } from './assets.js';
 import { playJump, playPunch } from './sfx.js';
 
 export class Game {
@@ -442,15 +442,15 @@ export class Game {
     }
 
     // other players
-    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, equipped: o.equipped });
+    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, equipped: o.equipped }, now);
 
     // local player
     const meOpts = { dev: this.me.dev, equipped: this.me.equipped };
     if (this.local.dead) {
       const k = (now - this.local.deadAt) / RESPAWN_MS;
-      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY - k * 40, this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k, 0, 0, 0, meOpts);
+      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY - k * 40, this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k, 0, 0, 0, meOpts, now);
     } else {
-      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY, this.local.dir, this.local.anim, this.local.walkT, this.me.name, 1, 0, now - this.local.punchAt, this.local.punchAngle, this.local.punchDist, meOpts);
+      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY, this.local.dir, this.local.anim, this.local.walkT, this.me.name, 1, 0, now - this.local.punchAt, this.local.punchAngle, this.local.punchDist, meOpts, now);
     }
 
     // particles
@@ -631,15 +631,10 @@ export class Game {
     }
   }
 
-  drawCharacter(ctx, x, y, dir, anim, walkT, name, alpha = 1, deadK = 0, punchT = 0, punchAngle = 0, punchDist = 0, opts = {}) {
+  drawCharacter(ctx, x, y, dir, anim, walkT, name, alpha = 1, deadK = 0, punchT = 0, punchAngle = 0, punchDist = 0, opts = {}, now = performance.now()) {
     const dev = !!opts.dev;
     const eq = opts.equipped || {};
     const H = TILE; // exactly one block tall
-
-    // animation: legs/arms swing while walking, tuck on a jump
-    let swing = 0;
-    if (anim === 'walk') swing = Math.sin(walkT * 1.1) * 0.5;
-    else if (anim === 'jump') swing = 0.5;
 
     // the punching arm is drawn FIRST (behind the body) in world space so its
     // fist reaches out past the torso toward the target
@@ -654,7 +649,7 @@ export class Game {
     ctx.translate(x, y);
     if (anim === 'dead') ctx.rotate(deadK * 1.4);
     if (dir < 0) ctx.scale(-1, 1); // body faces the cursor side
-    drawAvatar(ctx, H, eq, swing, anim);
+    drawAvatar(ctx, H, eq, anim, walkT, now);
     ctx.restore();
 
     // name tag — developers show a yellow, @-prefixed name
@@ -674,80 +669,53 @@ export class Game {
   }
 }
 
-// ---------- procedural layered avatar ----------
+// ---------- layered sprite avatar ----------
 // Origin is at the feet (x = 0, y = 0), the figure extends up to y = -H, and
-// `dir` has already been applied (the figure faces +x). Each equipment slot is
-// drawn as its own layer over a plain-skin body, so "naked" is a real body and
-// any shirt / pants / scarf / shoes / wings / pet can be added independently.
-const SKIN = '#c0894f';   // bare-body colour (the "naked" look)
+// `dir` has already been applied (the figure faces +x). Wings and pets remain
+// behind the body stack; the body itself comes from 32x32 layered sprites.
+const PLAYER_PART_FRAME_SIZE = 32;
+const PLAYER_EYE_FRAME_MS = 120;
+const PLAYER_PART_DRAW_ORDER = [
+  'right_leg_walk', 'left_arm', 'right_arm', 'left_leg_walk',
+  'torso', 'head', 'eyes', 'mouth',
+];
 
-function drawAvatar(ctx, H, eq, swing, anim) {
-  const hipY = -11, shoulderY = -21, headCY = -27, headR = 5.4;
-  const legLen = 11, legW = 5, armLen = 10, armW = 4;
-  const torsoTop = -22, torsoH = 12, torsoW = 13;
+function drawAvatar(ctx, H, eq, anim, walkT, now) {
+  const shoulderY = -21;
 
   const col = (slot, fallback) => {
     const it = eq[slot] && ITEMS[eq[slot]];
     return (it && it.color) || fallback;
   };
-  const legColor = col('pants', SKIN);
-  const torsoColor = col('shirt', SKIN);
-  const shoeColor = eq.shoes ? col('shoes', '#5a3a1a') : null;
 
   if (eq.wings) {
     const wIt = ITEMS[eq.wings] || {};
-    const frame = Math.floor(performance.now() / (wIt.frameMs || 500)) % (wIt.frames || 2);
+    const frame = Math.floor(now / (wIt.frameMs || 500)) % (wIt.frames || 2);
     drawFeatheredWings(ctx, shoulderY, wIt.color || '#eef2f8', frame);
   }
   if (eq.pet) drawPet(ctx, col('pet', '#7bc24a'));
 
-  // SIDE PROFILE (figure faces +x, nose on +x): the far arm is tucked behind
-  // the torso (near centre, barely visible), the near arm is drawn over the
-  // torso on the −x side (the side away from the face). This makes the facing
-  // and the front/back hands unambiguous instead of a symmetric two-arm pose.
-  drawLimb(ctx, -3, hipY, legLen, legW, -swing, shade(legColor, -0.14), shoeColor); // far leg
-  drawLimb(ctx, 2, shoulderY + 1, armLen - 1, armW, -swing, shade(SKIN, -0.18), null); // far arm (opposite its leg)
-
-  // torso
-  ctx.fillStyle = torsoColor;
-  roundRect(ctx, -torsoW / 2, torsoTop, torsoW, torsoH, 4); ctx.fill();
-
-  // near-side limbs (drawn over the torso). Arms swing OPPOSITE to the leg on
-  // their own side (contralateral gait) so they don't move in lockstep.
-  drawLimb(ctx, 3, hipY, legLen, legW, swing, legColor, shoeColor);              // near leg
-  if (anim !== 'punch') drawLimb(ctx, -5, shoulderY + 1, armLen, armW, swing, SKIN, null); // near/front arm
-
-  if (eq.scarf) { ctx.fillStyle = col('scarf', '#d24a4a'); roundRect(ctx, -torsoW / 2 - 1, torsoTop - 2, torsoW + 2, 4, 2); ctx.fill(); }
-
-  // head drawn as a clear SIDE PROFILE so facing is unambiguous (faces +x):
-  // skin head, hair covering top + back (−x), a nose poking out front (+x),
-  // and a single eye near the front.
-  ctx.fillStyle = SKIN;
-  ctx.beginPath(); ctx.arc(0, headCY, headR, 0, 7); ctx.fill();
-  // hair: cap over the top and the back half
-  ctx.fillStyle = '#3a2a1a';
-  ctx.beginPath();
-  ctx.arc(0, headCY, headR + 0.3, Math.PI * 0.62, Math.PI * 1.95);
-  ctx.lineTo(0, headCY - 1);
-  ctx.closePath(); ctx.fill();
-  // nose on the front edge
-  ctx.fillStyle = shade(SKIN, -0.12);
-  ctx.beginPath();
-  ctx.moveTo(headR - 1, headCY - 0.5);
-  ctx.lineTo(headR + 1.8, headCY + 1);
-  ctx.lineTo(headR - 1, headCY + 2.2);
-  ctx.closePath(); ctx.fill();
-  // eye near the front
-  ctx.fillStyle = '#2b2b33';
-  ctx.beginPath(); ctx.arc(headR * 0.42, headCY - 0.6, 1, 0, 7); ctx.fill();
+  for (const part of PLAYER_PART_DRAW_ORDER) drawPlayerPart(ctx, part, anim, walkT, now);
 }
 
-// a rounded-rect limb that hangs from a pivot and rotates by `angle`
-function drawLimb(ctx, px, py, len, w, angle, color, shoeColor) {
-  ctx.save(); ctx.translate(px, py); ctx.rotate(angle);
-  ctx.fillStyle = color; roundRect(ctx, -w / 2, 0, w, len, w * 0.4); ctx.fill();
-  if (shoeColor) { ctx.fillStyle = shoeColor; roundRect(ctx, -w / 2 - 0.6, len - 2.4, w + 2, 3.4, 1.4); ctx.fill(); }
-  ctx.restore();
+function drawPlayerPart(ctx, part, anim, walkT, now) {
+  const img = playerPartSprite(part);
+  if (!img) return;
+
+  const frames = Math.max(1, Math.floor(img.naturalWidth / PLAYER_PART_FRAME_SIZE));
+  let frame = 0;
+  if (part === 'eyes') frame = Math.floor(now / PLAYER_EYE_FRAME_MS) % frames;
+  else if ((part === 'left_leg_walk' || part === 'right_leg_walk') && anim === 'walk') {
+    frame = Math.floor(walkT) % frames;
+  }
+
+  ctx.drawImage(
+    img,
+    frame * PLAYER_PART_FRAME_SIZE, 0,
+    PLAYER_PART_FRAME_SIZE, PLAYER_PART_FRAME_SIZE,
+    -TILE / 2, -TILE,
+    TILE, TILE,
+  );
 }
 
 // A SYMMETRIC feathered wing pair, mounted on the back and spreading up and out

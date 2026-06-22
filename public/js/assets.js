@@ -1,25 +1,25 @@
 // Sprite assets (Kenney "Platformer Art Complete Pack", CC0 / public domain).
 // Tiles/items are loaded LAZILY the first time they're drawn — important since
 // the full catalog is ~875 sprites. Each item's path lives on ITEMS[id].sprite.
-// The player avatar's frames are small and preloaded up front.
+// The player avatar's layered parts are small and preloaded up front.
 import { ITEMS } from './shared/items.js';
 
-const cache = {};   // item id -> Image | null
-const player = {};  // frame name -> Image
+const cache = {};       // item id -> Image | null
+const playerParts = {}; // layered part name -> Image
 
-const PLAYER_FRAMES = [
-  'stand', 'jump', 'hurt', 'punchbody',
-  ...Array.from({ length: 11 }, (_, i) => 'walk' + String(i + 1).padStart(2, '0')),
+const PLAYER_PARTS = [
+  'right_leg_walk', 'left_arm', 'right_arm', 'left_leg_walk',
+  'torso', 'head', 'eyes', 'mouth',
 ];
 
 function load(src) { const i = new Image(); i.src = src; return i; }
 function ready(i) { return !!(i && i.complete && i.naturalWidth > 0); }
 
 export function preloadPlayer() {
-  for (const f of PLAYER_FRAMES) player[f] = load(`assets/player/${f}.png`);
+  for (const p of PLAYER_PARTS) playerParts[p] = load(`assets/player/new/${p}.png`);
 }
 
-export function playerSprite(name) { return ready(player[name]) ? player[name] : null; }
+export function playerPartSprite(name) { return ready(playerParts[name]) ? playerParts[name] : null; }
 
 export function tileSprite(id) {
   if (!(id in cache)) {
