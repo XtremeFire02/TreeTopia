@@ -15,6 +15,7 @@ export class Game {
     this.ui = ui;
     this.canvas = document.getElementById('canvas');
     this.ctx = this.canvas.getContext('2d');
+    setImageSmoothing(this.ctx, false);
     this.me = { id: 0, name: '', gems: 0, inventory: {}, equipped: {}, dev: false };
 
     this.world = null;
@@ -43,6 +44,7 @@ export class Game {
     const fit = () => {
       this.canvas.width = this.canvas.clientWidth;
       this.canvas.height = this.canvas.clientHeight;
+      setImageSmoothing(this.ctx, false);
     };
     window.addEventListener('resize', fit);
     this._fit = fit;
@@ -382,7 +384,8 @@ export class Game {
     const ctx = this.ctx, w = this.world; if (!w) return;
     const cw = this.canvas.width, ch = this.canvas.height;
     const z = this.zoom;
-    const camX = this.camera.x, camY = this.camera.y;
+    const camX = snapPixel(this.camera.x, z), camY = snapPixel(this.camera.y, z);
+    setImageSmoothing(ctx, false);
 
     // sky gradient (drawn unscaled, fills the whole canvas)
     const g = ctx.createLinearGradient(0, 0, 0, ch);
@@ -402,7 +405,7 @@ export class Game {
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
       const bg = w.bg[ty * w.width + tx];
       if (!bg || !ITEMS[bg]) continue;
-      const sx = tx * TILE - camX, sy = ty * TILE - camY;
+      const sx = snapPixel(tx * TILE - camX, z), sy = snapPixel(ty * TILE - camY, z);
       const sp = tileSprite(bg);
       if (sp) ctx.drawImage(sp, sx, sy, TILE, TILE);
       else ctx.fillStyle = shade(ITEMS[bg].color, -0.45), ctx.fillRect(sx, sy, TILE, TILE);
@@ -414,7 +417,7 @@ export class Game {
       const i = ty * w.width + tx;
       const fg = w.fg[i];
       if (!fg) continue;
-      const sx = tx * TILE - camX, sy = ty * TILE - camY;
+      const sx = snapPixel(tx * TILE - camX, z), sy = snapPixel(ty * TILE - camY, z);
       this.drawTile(ctx, fg, sx, sy, w.data[i], now);
       const fx = this.breakFx.get(tx + ',' + ty);
       if (fx) {
@@ -427,9 +430,9 @@ export class Game {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const d of this.drops.values()) {
       const bob = Math.sin(now / 300 + d.id) * 3;
-      const sx = d.x - camX, sy = d.y - camY + bob;
+      const sx = snapPixel(d.x - camX, z), sy = snapPixel(d.y - camY + Math.round(bob), z);
       ctx.fillStyle = 'rgba(0,0,0,.25)';
-      ctx.beginPath(); ctx.ellipse(sx, sy + 13, 9, 4, 0, 0, 7); ctx.fill();
+      ctx.fillRect(sx - 9, sy + 11, 18, 4);
       const sp = dropSprite(d.item);
       if (sp) ctx.drawImage(sp, sx - 12, sy - 12, 24, 24);
       else { ctx.font = '20px serif'; ctx.fillStyle = '#fff'; ctx.fillText(ITEMS[d.item] ? ITEMS[d.item].icon : '❔', sx, sy); }
@@ -442,29 +445,30 @@ export class Game {
     }
 
     // other players
-    for (const o of this.others.values()) this.drawCharacter(ctx, o.x - camX, o.y - camY, o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, equipped: o.equipped }, now);
+    for (const o of this.others.values()) this.drawCharacter(ctx, snapPixel(o.x - camX, z), snapPixel(o.y - camY, z), o.dir, o.anim, o.walkT, o.name, 1, 0, now - (o.punchAt || 0), o.punchAngle || 0, o.punchDist || 0, { dev: o.dev, equipped: o.equipped }, now);
 
     // local player
     const meOpts = { dev: this.me.dev, equipped: this.me.equipped };
     if (this.local.dead) {
       const k = (now - this.local.deadAt) / RESPAWN_MS;
-      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY - k * 40, this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k, 0, 0, 0, meOpts, now);
+      this.drawCharacter(ctx, snapPixel(this.local.x - camX, z), snapPixel(this.local.y - camY - k * 40, z), this.local.dir, 'dead', 0, this.me.name, 1 - k * 0.8, k, 0, 0, 0, meOpts, now);
     } else {
-      this.drawCharacter(ctx, this.local.x - camX, this.local.y - camY, this.local.dir, this.local.anim, this.local.walkT, this.me.name, 1, 0, now - this.local.punchAt, this.local.punchAngle, this.local.punchDist, meOpts, now);
+      this.drawCharacter(ctx, snapPixel(this.local.x - camX, z), snapPixel(this.local.y - camY, z), this.local.dir, this.local.anim, this.local.walkT, this.me.name, 1, 0, now - this.local.punchAt, this.local.punchAngle, this.local.punchDist, meOpts, now);
     }
 
     // particles
     for (const p of this.particles) {
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(p.x - camX, p.y - camY, p.r, 0, 7); ctx.fill();
+      const size = Math.max(1, Math.round(p.r * 2));
+      ctx.fillRect(snapPixel(p.x - camX - size / 2, z), snapPixel(p.y - camY - size / 2, z), size, size);
     }
     ctx.globalAlpha = 1;
 
     // build target highlight (hidden in wrench mode)
     const t = this.pointerTile();
     if (t && this.selected !== 'wrench' && !this.ui.modalOpen() && !(this.ui.blocksGamePointer && this.ui.blocksGamePointer(mouse.sx, mouse.sy))) {
-      const sx = t.x * TILE - camX, sy = t.y * TILE - camY;
+      const sx = snapPixel(t.x * TILE - camX, z), sy = snapPixel(t.y * TILE - camY, z);
       ctx.lineWidth = 2;
       ctx.strokeStyle = this.inReach(t.x, t.y) ? 'rgba(255,255,255,.8)' : 'rgba(210,74,74,.8)';
       ctx.strokeRect(sx + 1, sy + 1, TILE - 2, TILE - 2);
@@ -478,7 +482,7 @@ export class Game {
         const typeName = ((block && ITEMS[block] && ITEMS[block].name) || 'Mystery') + ' Tree';
         const secs = Math.ceil(tinfo.left / 1000);
         const time = secs < 60 ? `${secs}s left` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} left`;
-        this.drawBubble(ctx, this.local.x - camX, this.local.y - camY - 70, [`🌱 ${typeName}`, time]);
+        this.drawBubble(ctx, snapPixel(this.local.x - camX, z), snapPixel(this.local.y - camY - 70, z), [`🌱 ${typeName}`, time]);
       }
     }
 
@@ -488,7 +492,7 @@ export class Game {
       let px, py;
       if (id === this.me.id) { px = this.local.x; py = this.local.y; }
       else { const o = this.others.get(id); if (!o) continue; px = o.x; py = o.y; }
-      this.drawBubble(ctx, px - camX, py - camY - TILE - 16, sp.text);
+      this.drawBubble(ctx, snapPixel(px - camX, z), snapPixel(py - camY - TILE - 16, z), sp.text);
     }
 
     ctx.restore();   // end scaled world space
@@ -496,7 +500,7 @@ export class Game {
     if (this.ui) this.ui.drawCanvas(ctx, now);
 
     // DOM wrench buttons over players (only while the wrench is selected)
-    this.ui.updatePlayerTags([...this.others.values()], this.camera, this.selected === 'wrench', z);
+    this.ui.updatePlayerTags([...this.others.values()], { x: camX, y: camY }, this.selected === 'wrench', z);
   }
 
   advanceTime(ms) {
@@ -599,20 +603,20 @@ export class Game {
     const ready = t && (Date.now() - t.plantedAt >= t.growTime * 1000);
     const frac = t ? Math.min(1, (Date.now() - t.plantedAt) / (t.growTime * 1000)) : 0;
     const cx = x + TILE / 2;
-    const h = 6 + frac * (TILE - 10);
+    const h = Math.round(6 + frac * (TILE - 10));
     // trunk
     ctx.fillStyle = '#7a4a23';
     ctx.fillRect(cx - 2, y + TILE - h, 4, h);
     // foliage colored by the block it grows
     const blockId = t ? ITEMS[t.seed]?.seedOf : null;
     const col = blockId && ITEMS[blockId] ? ITEMS[blockId].color : '#3f8f3a';
-    const r = 4 + frac * 9;
+    const r = Math.round(4 + frac * 9);
     ctx.fillStyle = ready ? col : shade(col, -0.1);
-    ctx.beginPath(); ctx.arc(cx, y + TILE - h, r, 0, 7); ctx.fill();
+    ctx.fillRect(cx - r, y + TILE - h - r, r * 2, r * 2);
     if (ready) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 250);
       ctx.strokeStyle = `rgba(242,197,49,${0.4 + pulse * 0.5})`; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(cx, y + TILE - h, r + 3, 0, 7); ctx.stroke();
+      ctx.strokeRect(cx - r - 3, y + TILE - h - r - 3, r * 2 + 6, r * 2 + 6);
       ctx.font = '12px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('✨', cx, y + TILE - h - r - 6);
     }
@@ -779,6 +783,12 @@ function drawPet(ctx, color) {
 // ---------- helpers ----------
 function mkOther(p) { return { id: p.id, name: p.name, dev: !!p.dev, equipped: p.equipped || {}, x: p.x, y: p.y, tx: p.x, ty: p.y, dir: p.dir || 1, anim: p.anim || 'idle', walkT: 0, punchAt: 0, punchAngle: 0, punchDist: 0, punchSeq: p.punchSeq ?? 0 }; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function snapPixel(v, z = 1) { return Math.round(v * z) / z; }
+function setImageSmoothing(ctx, enabled) {
+  for (const key of ['imageSmoothingEnabled', 'webkitImageSmoothingEnabled', 'mozImageSmoothingEnabled', 'msImageSmoothingEnabled']) {
+    if (key in ctx) ctx[key] = enabled;
+  }
+}
 
 // Big comically-oversized punching fist with a forearm that tapers from the
 // fist down to roughly torso width, shot from the chest toward `angle` and

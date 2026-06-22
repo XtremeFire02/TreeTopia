@@ -82,7 +82,7 @@ input:focus, select:focus { border-color: var(--accent2); }
 
 /* ---------- game ---------- */
 #game { display: block; }
-#canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; }
+#canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: crisp-edges; image-rendering: pixelated; cursor: crosshair; }
 
 #hud {
   position: absolute; top: 0; left: 0; right: 0; padding: 8px 10px;

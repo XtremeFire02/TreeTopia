@@ -522,7 +522,11 @@ export class CanvasInventory {
   _drawItemIcon(ctx, id, cx, cy, size) {
     const img = tileSprite(id);
     if (img) {
-      ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+      const drawSize = Math.max(1, Math.round(size));
+      ctx.save();
+      setImageSmoothing(ctx, false);
+      ctx.drawImage(img, Math.round(cx - drawSize / 2), Math.round(cy - drawSize / 2), drawSize, drawSize);
+      ctx.restore();
       return;
     }
     ctx.font = `${Math.max(13, size * 0.72)}px serif`;
@@ -609,6 +613,12 @@ function loadImage(src) {
 
 function ready(img) {
   return !!(img && img.complete && img.naturalWidth > 0);
+}
+
+function setImageSmoothing(ctx, enabled) {
+  for (const key of ['imageSmoothingEnabled', 'webkitImageSmoothingEnabled', 'mozImageSmoothingEnabled', 'msImageSmoothingEnabled']) {
+    if (key in ctx) ctx[key] = enabled;
+  }
 }
 
 function srcRect(panel, r) {
